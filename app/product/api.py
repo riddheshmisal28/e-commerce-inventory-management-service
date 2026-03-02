@@ -1,22 +1,32 @@
-from app.product.schema import ProductListResponse
+from app.product.service import ProductService
+from app.core.database import get_db
+from sqlalchemy.orm import Session
+from .schema import ProductListResponse, ProductResponse, ProductCreate
 from fastapi import APIRouter, Depends, Query
 
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
+@router.post("", response_model=ProductResponse)
+def create_product(payload: ProductCreate, db: Session = Depends(get_db)):
+    service = ProductService(db)
+    return service.create_product(payload)
+
 
 @router.get("", response_model=ProductListResponse)
-def get_product():
+def list_products(
+    search: str | None = None,
+    category_id: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db)
+): 
+    service = ProductService(db)
+    products, total = service.list_products(search, category_id, page, page_size)
+
     return {
-        "data": [
-            {
-                "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                "name": "Product 1",
-                "description": "Description 1",
-                "category_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
-            }
-        ],
-        "total": 1,
-        "page": 1,
-        "page_size": 1
+        "data": products,
+        "total": total,
+        "page": page,
+        "page_size": page_size
     }
