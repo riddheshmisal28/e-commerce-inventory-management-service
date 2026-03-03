@@ -30,3 +30,14 @@ def list_products(
         "page": page,
         "page_size": page_size
     }
+
+@router.get("/{product_id}", response_model=ProductResponse)
+def get_product(product_id: str, db: Session = Depends(get_db)):
+    service = ProductService(db)
+    return service.get_product(product_id)
+
+@router.delete("/{product_id}")
+def delete_product(product_id: str, db: Session = Depends(get_db)):
+    service = ProductService(db)
+    service.delete_product(product_id)
+    return {"message": "Deleted successfully"}

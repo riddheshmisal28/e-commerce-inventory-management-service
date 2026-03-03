@@ -11,7 +11,7 @@ class Product(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     category_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        # ForeignKey("categories.id", ondelete="RESTRICT"),
+        ForeignKey("categories.id", ondelete="RESTRICT"),
         nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -20,3 +20,4 @@ class Product(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+    skus = relationship("SKU", back_populates="product", cascade="all, delete")

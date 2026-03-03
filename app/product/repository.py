@@ -15,6 +15,10 @@ class ProductRepository:
     def get(self, product_id):
         return self.db.get(Product, product_id)
 
+    def delete(self, product: Product):
+        self.db.delete(product)
+        self.db.commit()
+
     def list(self, search, category_id, page, page_size):
         query = select(Product)
 

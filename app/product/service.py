@@ -24,5 +24,9 @@ class ProductService:
             raise ProductNotFound("Product not found")
         return product
 
+    def delete_product(self, product_id):
+        product = self.get_product(product_id)
+        self.repo.delete(product)
+
     def list_products(self, search, category_id, page, page_size):
         return self.repo.list(search, category_id, page, page_size)

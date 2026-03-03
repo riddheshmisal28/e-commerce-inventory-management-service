@@ -28,3 +28,7 @@ class ProductCreate(BaseModel):
     @classmethod
     def trim_name(cls, v: str):
         return v.strip()
+        
+class ProductUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
