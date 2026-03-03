@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from app.product.api import router as product_router
+from app.category.api import router as category_router
 from app.core.database import Base, engine
 from app.product.exceptions import ProductException
 
@@ -20,6 +21,7 @@ def create_app() -> FastAPI:
     Base.metadata.create_all(bind=engine)
 
     app.include_router(product_router)
+    app.include_router(category_router)
 
     return app
 

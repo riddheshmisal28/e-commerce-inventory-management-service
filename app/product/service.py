@@ -9,7 +9,7 @@ class ProductService:
         self.repo = ProductRepository(db)
 
     def create_product(self, data):
-
+        
         product = Product(
             name = data.name,
             description = data.description,
