@@ -24,4 +24,4 @@ class Product(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
-    # skus = relationship("SKU", back_populates="product", cascade="all, delete")
+    skus = relationship("SKU", back_populates="product", cascade="all, delete")

@@ -6,8 +6,8 @@ class ProductException(Exception):
 
 class ProductNotFound(ProductException):
     def __init__(self, message: str = "Product not found"):
-        super().__init__(message, status_code=404)
+        super().__init__(message, status_code = 404)
 
 class CategoryNotFound(ProductException):
     def __init__(self, message: str = "Category not found"):
-        super().__init__(message, status_code=404)
+        super().__init__(message, status_code = 404)
