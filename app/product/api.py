@@ -10,7 +10,7 @@ router = APIRouter(prefix="/products", tags=["Products"])
 @router.post("", response_model=ProductResponse)
 def create_product(payload: ProductCreate, db: Session = Depends(get_db)):
     service = ProductService(db)
-    return service.create_product(payload)
+    return service.create_product(db, payload)
 
 
 @router.get("", response_model=ProductListResponse)

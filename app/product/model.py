@@ -14,10 +14,14 @@ class Product(Base):
         ForeignKey("categories.id", ondelete="RESTRICT"),
         nullable=False
     )
+    category: Mapped["Category"] = relationship(
+        "Category",
+        back_populates="products"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
-    skus = relationship("SKU", back_populates="product", cascade="all, delete")
+    # skus = relationship("SKU", back_populates="product", cascade="all, delete")
