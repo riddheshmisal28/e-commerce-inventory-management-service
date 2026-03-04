@@ -4,6 +4,7 @@ from app.product.exceptions import ProductNotFound
 from app.product.repository import ProductRepository
 from app.sku.repository import SKURepository
 from .model import SKU
+
 class SKUService:
     def __init__(self, db):
         self.repo = SKURepository(db)
@@ -20,6 +21,7 @@ class SKUService:
 
         sku = SKU(**sku_data.model_dump())
         self.repo.create(sku)
+        return sku
 
     def update_sku(self, sku_id, data):
         sku = self.repo.get_by_id(sku_id)

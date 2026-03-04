@@ -22,11 +22,8 @@ class SKUResponse(SKUBase):
     created_at: datetime
     updated_at: datetime
 
-    class config:
+    class Config:
         from_attributes = True
 
 class SKUListResponse(BaseModel):
     data: list[SKUResponse]
-    total: int
-    page: int
-    page_size: int
