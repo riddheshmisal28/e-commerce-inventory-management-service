@@ -1,5 +1,5 @@
 from uuid import UUID
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Optional
 
 class ProductResponse(BaseModel):
@@ -8,8 +8,9 @@ class ProductResponse(BaseModel):
     description: str
     category_id: UUID
 
-    class Config:
+    model_config = ConfigDict(
         from_attributes = True
+    )
 
 class ProductListResponse(BaseModel):
     data: list[ProductResponse]
