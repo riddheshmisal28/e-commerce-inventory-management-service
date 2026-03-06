@@ -14,6 +14,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   app:
     build: .
     container_name: inventory-app
@@ -23,7 +29,8 @@ services:
     environment:
       - DATABASE_URL=postgresql+psycopg2://postgres:qwer%40321@db/inventory
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - .:/app
 
