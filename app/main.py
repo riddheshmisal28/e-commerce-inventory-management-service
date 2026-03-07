@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -11,10 +12,24 @@ from app.core.logger import get_logger
 
 logger = get_logger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Initializing application startup...")
+    try:
+        with engine.connect():
+            logger.info("Successfully connected to the database.")
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database schema applied.")
+    except Exception as e:
+        logger.critical(f"Failed to connect and initialize database on startup! Error: {e}", exc_info=True)
+    yield
+    logger.info("Application shutdown successful.")
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Inventory Management Service",
-        version="1.0.0"
+        version="1.0.0",
+        lifespan=lifespan
     )
 
     @app.exception_handler(ProductException)
@@ -24,17 +39,6 @@ def create_app() -> FastAPI:
             status_code=exc.status_code,
             content={"message": exc.message}
         )
-
-    @app.on_event("startup")
-    def startup_event():
-        logger.info("Initializing application startup...")
-        try:
-            with engine.connect():
-                logger.info("Successfully connected to the database.")
-            Base.metadata.create_all(bind=engine)
-            logger.info("Database schema applied.")
-        except Exception as e:
-            logger.critical(f"Failed to connect and initialize database on startup! Error: {e}", exc_info=True)
 
     app.include_router(category_router)
     app.include_router(product_router)

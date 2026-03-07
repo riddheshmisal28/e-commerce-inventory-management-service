@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from uuid import UUID
 from typing import Optional
 from datetime import datetime
@@ -22,8 +22,9 @@ class SKUResponse(SKUBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
+    model_config = ConfigDict(
         from_attributes = True
+    )
 
 class SKUListResponse(BaseModel):
     data: list[SKUResponse]

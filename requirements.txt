@@ -4,3 +4,6 @@ SQLAlchemy
 psycopg2-binary
 pydantic
 pydantic-settings
+pytest
+pytest-mock
+httpx
