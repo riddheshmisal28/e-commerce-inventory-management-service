@@ -1,12 +1,16 @@
 from sqlalchemy.orm import Session
 from .model import Product
 from sqlalchemy import select, func
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 class ProductRepository:
     def __init__(self, db: Session):
         self.db = db
 
     def create(self, product: Product):
+        logger.info("Executing DB insert for product", extra={"product_id": str(product.id) if product.id else None})
         self.db.add(product)
         self.db.commit()
         self.db.refresh(product)
@@ -16,6 +20,7 @@ class ProductRepository:
         return self.db.get(Product, product_id)
 
     def delete(self, product: Product):
+        logger.info("Executing DB delete for product", extra={"product_id": str(product.id)})
         self.db.delete(product)
         self.db.commit()
 

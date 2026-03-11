@@ -1,3 +1,4 @@
+from app.middleware.correlation_middleware import CorrelationIdMiddleware
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -21,7 +22,7 @@ async def lifespan(app: FastAPI):
         Base.metadata.create_all(bind=engine)
         logger.info("Database schema applied.")
     except Exception as e:
-        logger.critical(f"Failed to connect and initialize database on startup! Error: {e}", exc_info=True)
+        logger.critical("Failed to connect and initialize database on startup!", extra={"error": str(e)}, exc_info=True)
     yield
     logger.info("Application shutdown successful.")
 
@@ -34,12 +35,12 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(ProductException)
     async def product_exception_handler(request: Request, exc: ProductException):
-        logger.error(f"ProductException occurred: {exc.message} (status_code: {exc.status_code})")
+        logger.error("ProductException occurred", extra={"error_message": exc.message, "status_code": exc.status_code})
         return JSONResponse(
             status_code=exc.status_code,
             content={"message": exc.message}
         )
-
+    app.add_middleware(CorrelationIdMiddleware)
     app.include_router(category_router)
     app.include_router(product_router)
     app.include_router(sku_router)

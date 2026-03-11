@@ -1,9 +1,13 @@
 from uuid import UUID
 from sqlalchemy.orm import Session
 from .model import Category
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 class CategoryRepository:
     def create(self, db: Session, category: Category) -> Category:
+        logger.info("Executing DB insert for category", extra={"category_id": str(category.id)})
         db.add(category)
         db.commit()
         db.refresh(category)
@@ -19,5 +23,6 @@ class CategoryRepository:
         return db.query(Category).all()
 
     def delete(self, db: Session, category: Category) -> None:
+        logger.info("Executing DB delete for category", extra={"category_id": str(category.id)})
         db.delete(category)
         db.commit()
