@@ -2,8 +2,10 @@ from app.product.service import ProductService
 from app.core.database import get_db
 from sqlalchemy.orm import Session
 from .schema import ProductListResponse, ProductResponse, ProductCreate
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
+from app.core.logger import get_logger
 
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -34,10 +36,18 @@ def list_products(
 @router.get("/{product_id}", response_model=ProductResponse)
 def get_product(product_id: str, db: Session = Depends(get_db)):
     service = ProductService(db)
-    return service.get_product(product_id)
+    try:
+        return service.get_product(product_id)
+    except Exception as e:
+        logger.error("Failed to list a product", extra={"product_id": str(product_id), "error": str(e)}, exc_info=True)
+        raise e
 
 @router.delete("/{product_id}")
 def delete_product(product_id: str, db: Session = Depends(get_db)):
     service = ProductService(db)
-    service.delete_product(product_id)
-    return {"message": "Deleted successfully"}
+    try:
+        service.delete_product(product_id)
+        return {"message": "Deleted successfully"}
+    except Exception as e:
+        logger.error("Failed to delete a product", extra={"product_id": str(product_id), "error": str(e)}, exc_info=True)
+        raise e

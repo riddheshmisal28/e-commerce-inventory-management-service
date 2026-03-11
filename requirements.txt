@@ -6,4 +6,5 @@ pydantic
 pydantic-settings
 pytest
 pytest-mock
+python-json-logger
 httpx
