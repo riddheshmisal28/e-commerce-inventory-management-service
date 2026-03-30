@@ -8,3 +8,4 @@ pytest
 pytest-mock
 python-json-logger
 httpx
+elasticsearch
