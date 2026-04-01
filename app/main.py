@@ -8,6 +8,7 @@ from app.category.api import router as category_router
 from app.sku.api import router as sku_router
 
 from app.core.database import Base, engine
+from app.core.elastic import es_service
 from app.product.exceptions import ProductException
 from app.core.logger import get_logger
 
@@ -23,7 +24,19 @@ async def lifespan(app: FastAPI):
         logger.info("Database schema applied.")
     except Exception as e:
         logger.critical("Failed to connect and initialize database on startup!", extra={"error": str(e)}, exc_info=True)
+
+    try:
+        es_service.connect()
+    except Exception as e:
+        logger.critical("Failed to connect to Elasticsearch on startup!", extra={"error": str(e)}, exc_info=True)
+
     yield
+
+    try:
+        es_service.close()
+    except Exception as e:
+        logger.error("Error during Elasticsearch shutdown", extra={"error": str(e)})
+
     logger.info("Application shutdown successful.")
 
 def create_app() -> FastAPI:

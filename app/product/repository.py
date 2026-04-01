@@ -19,6 +19,9 @@ class ProductRepository:
     def get(self, product_id):
         return self.db.get(Product, product_id)
 
+    def get_all(self):
+        return self.db.scalars(select(Product)).all()
+
     def delete(self, product: Product):
         logger.info("Executing DB delete for product", extra={"product_id": str(product.id)})
         self.db.delete(product)

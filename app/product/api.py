@@ -9,6 +9,16 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
+@router.post("/sync")
+def sync_products(db: Session = Depends(get_db)):
+    service = ProductService(db)
+    try:
+        count = service.sync_all_products()
+        return {"message": f"Successfully synced {count} products to Elasticsearch."}
+    except Exception as e:
+        logger.error("Failed to sync products", extra={"error": str(e)}, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to sync products")
+
 @router.post("", response_model=ProductResponse)
 def create_product(payload: ProductCreate, db: Session = Depends(get_db)):
     service = ProductService(db)
@@ -32,6 +42,15 @@ def list_products(
         "page": page,
         "page_size": page_size
     }
+
+@router.get("/search", response_model=list[ProductResponse])
+def search_products(q: str = Query(..., min_length=1), db: Session = Depends(get_db)):
+    service = ProductService(db)
+    try:
+        return service.search_products(q)
+    except Exception as e:
+        logger.error("Failed to search products", extra={"query": q, "error": str(e)}, exc_info=True)
+        raise HTTPException(status_code=500, detail="Search failed")
 
 @router.get("/{product_id}", response_model=ProductResponse)
 def get_product(product_id: str, db: Session = Depends(get_db)):
