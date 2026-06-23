@@ -2,7 +2,9 @@ from app.middleware.correlation_middleware import CorrelationIdMiddleware
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi_mcp import FastApiMCP
 
+from app.engineering.api import router as engineering_router
 from app.product.api import router as product_router
 from app.category.api import router as category_router
 from app.sku.api import router as sku_router
@@ -57,6 +59,14 @@ def create_app() -> FastAPI:
     app.include_router(category_router)
     app.include_router(product_router)
     app.include_router(sku_router)
+    app.include_router(engineering_router)
+
+    mcp = FastApiMCP(
+        app,
+        name="Inventory Management MCP"
+    )
+    mcp.mount()
+
 
     return app
 

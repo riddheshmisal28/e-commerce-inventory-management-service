@@ -1,4 +1,5 @@
 fastapi
+fastapi-mcp
 uvicorn
 SQLAlchemy
 psycopg2-binary
