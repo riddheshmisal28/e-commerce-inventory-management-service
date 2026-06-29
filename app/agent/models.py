@@ -41,3 +41,11 @@ class Requirement(BaseModel):
     title: str
     description: str
     acceptance_criteria: list[str]
+
+class ContextPlan(BaseModel):
+    need_entities: bool = False
+    need_endpoints: bool = False
+    need_models: bool = False
+    need_openapi: bool = False
+    need_documentation: bool = False
+    keywords: list[str] = []

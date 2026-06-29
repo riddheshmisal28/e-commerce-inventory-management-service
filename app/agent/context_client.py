@@ -16,6 +16,12 @@ def get_entities():
     ).json()
 
 
+def get_models():
+    return requests.get(
+        f"{BASE_URL}/engineering/models"
+    ).json()
+
+
 def search_endpoints(keyword: str):
     return requests.get(
         f"{BASE_URL}/engineering/endpoints/search",

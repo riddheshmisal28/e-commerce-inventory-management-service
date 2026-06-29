@@ -2,10 +2,6 @@ from models import (
     ImpactAnalysisReport,
     Requirement
 )
-from context_client import (
-    get_endpoints,
-    get_entities
-)
 from builders.feature_summary_builder import (
     build_feature_summary
 )
@@ -25,13 +21,9 @@ from builders.bdd_builder import (
 from analyzers.entity_analyzer import analyze_entities
 from analyzers.endpoint_analyzer import analyze_endpoints
 from analyzers.blast_radius import build_blast_radius
+from analyzers.requirement_analyzer import analyze_requirement
 
-
-def collect_context():
-    return {
-        "endpoints": get_endpoints(),
-        "entities": get_entities()
-    }
+from retrievers.context_retriever import retrieve_context
 
 
 def build_requirement_text(
@@ -48,7 +40,9 @@ def build_requirement_text(
 
 def run(requirement: Requirement):
 
-    context = collect_context()
+    plan = analyze_requirement(requirement)
+
+    context = retrieve_context(plan)
 
     requirement_text = build_requirement_text(
         requirement
@@ -56,12 +50,12 @@ def run(requirement: Requirement):
 
     entity_impacts = analyze_entities(
         requirement_text,
-        context["entities"]
+        context.get("entities", [])
     )
 
     endpoint_impacts = analyze_endpoints(
         requirement_text,
-        context["endpoints"]
+        context.get("endpoints", [])
     )
 
     feature_summary = build_feature_summary(
