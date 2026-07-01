@@ -37,66 +37,77 @@ def build_requirement_text(
     {' '.join(requirement.acceptance_criteria)}
     """
 
+class ImpactAgent:
 
-def run(requirement: Requirement):
+    def run(
+        self,
+        requirement: Requirement
+    ):
 
-    plan = analyze_requirement(requirement)
-
-    context = retrieve_context(plan)
-
-    requirement_text = build_requirement_text(
-        requirement
-    )
-
-    entity_impacts = analyze_entities(
-        requirement_text,
-        context.get("entities", [])
-    )
-
-    endpoint_impacts = analyze_endpoints(
-        requirement_text,
-        context.get("endpoints", [])
-    )
-
-    feature_summary = build_feature_summary(
-        requirement
-    )
-
-    clarification_questions = (
-        build_clarification_questions(
+        plan = analyze_requirement(
             requirement
         )
-    )
 
-    test_scenarios = (
-        build_test_scenarios(
+        context = retrieve_context(
+            plan
+        )
+
+        requirement_text = build_requirement_text(
             requirement
         )
-    )
 
-    bdd_scenarios = (
-        build_bdd_scenarios(
-            requirement
+        entity_impacts = analyze_entities(
+            requirement_text,
+            context.entities
         )
-    )
 
-    blast_radius = build_blast_radius(
-        entity_impacts,
-        endpoint_impacts
-    )
+        endpoint_impacts = analyze_endpoints(
+            requirement_text,
+            context.endpoints
+        )
 
-    report = ImpactAnalysisReport(
-        feature_summary=feature_summary,
-        component_blast_radius=blast_radius,
-        potential_data_model_impact=entity_impacts,
-        api_interface_mutations=endpoint_impacts,
-        clarification_questions=clarification_questions,
-        test_scenarios=test_scenarios,
-        bdd_scenarios=bdd_scenarios
-    )
+        feature_summary = (
+            build_feature_summary(
+                requirement
+            )
+        )
 
-    return report.model_dump()
+        clarification_questions = (
+            build_clarification_questions(
+                requirement
+            )
+        )
 
+        test_scenarios = (
+            build_test_scenarios(
+                requirement
+            )
+        )
+
+        bdd_scenarios = (
+            build_bdd_scenarios(
+                requirement
+            )
+        )
+
+        blast_radius = (
+            build_blast_radius(
+                entity_impacts,
+                endpoint_impacts
+            )
+        )
+
+        report = ImpactAnalysisReport(
+            feature_summary=feature_summary,
+            component_blast_radius=blast_radius,
+            potential_data_model_impact=entity_impacts,
+            api_interface_mutations=endpoint_impacts,
+            clarification_questions=clarification_questions,
+            test_scenarios=test_scenarios,
+            bdd_scenarios=bdd_scenarios
+        )
+
+        return report.model_dump()
 
 if __name__ == "__main__":
 
@@ -114,6 +125,10 @@ if __name__ == "__main__":
         ]
     )
 
-    result = run(requirement)
+    agent = ImpactAgent()
+
+    result = agent.run(
+        requirement
+    )
 
     print(result)

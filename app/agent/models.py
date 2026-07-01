@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import Any
 
 class FeatureSummary(BaseModel):
     name: str
@@ -48,4 +49,16 @@ class ContextPlan(BaseModel):
     need_models: bool = False
     need_openapi: bool = False
     need_documentation: bool = False
-    keywords: list[str] = []
+    keywords: list[str] = Field(default_factory=list)
+
+class EngineeringContext(BaseModel):
+    entities: list[Any] = Field(default_factory=list)
+    endpoints: list[Any] = Field(default_factory=list)
+    models: list[Any] = Field(default_factory=list)
+    retrieved_sources: list[str] = Field(default_factory=list)
+
+class AnalysisContext(BaseModel):
+    requirement: Requirement
+    engineering_context: EngineeringContext
+    entity_impacts: list[DataModelImpact] = Field(default_factory=list)
+    endpoint_impacts: list[ApiMutation] = Field(default_factory=list)

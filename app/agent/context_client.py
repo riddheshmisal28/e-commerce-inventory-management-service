@@ -1,29 +1,49 @@
 import requests
 
 
-BASE_URL = "http://localhost:8000"
+class EngineeringContextClient:
 
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8000",
+        timeout: int = 5,
+    ):
+        self.base_url = base_url
+        self.timeout = timeout
+        self.session = requests.Session()
 
-def get_endpoints():
-    return requests.get(
-        f"{BASE_URL}/engineering/endpoints"
-    ).json()
+    def get_endpoints(self):
+        response = self.session.get(
+            f"{self.base_url}/engineering/endpoints",
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        return response.json()
 
+    def get_entities(self):
+        response = self.session.get(
+            f"{self.base_url}/engineering/entities",
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        return response.json()
 
-def get_entities():
-    return requests.get(
-        f"{BASE_URL}/engineering/entities"
-    ).json()
+    def get_models(self):
+        response = self.session.get(
+            f"{self.base_url}/engineering/models",
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        return response.json()
 
-
-def get_models():
-    return requests.get(
-        f"{BASE_URL}/engineering/models"
-    ).json()
-
-
-def search_endpoints(keyword: str):
-    return requests.get(
-        f"{BASE_URL}/engineering/endpoints/search",
-        params={"keyword": keyword},
-    ).json()
+    def search_endpoints(
+        self,
+        keyword: str,
+    ):
+        response = self.session.get(
+            f"{self.base_url}/engineering/endpoints/search",
+            params={"keyword": keyword},
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        return response.json()
