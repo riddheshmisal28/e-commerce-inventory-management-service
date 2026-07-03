@@ -8,6 +8,7 @@ class FeatureSummary(BaseModel):
 class BlastRadius(BaseModel):
     component: str
     reason: str
+    severity: str = "Low"
 
 class DataModelImpact(BaseModel):
     entity: str

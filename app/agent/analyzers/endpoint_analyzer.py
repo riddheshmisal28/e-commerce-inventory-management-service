@@ -1,68 +1,121 @@
-def analyze_endpoints(
-    requirement: str,
-    endpoints: list
-):
-    impacts = []
+from models import ApiMutation
 
-    req = requirement.lower()
 
-    if "stock" not in req:
+ENDPOINT_RULES = [
+    {
+        "keywords": ["stock", "inventory", "quantity"],
+        "path": "/skus",
+        "method": "post",
+        "change_type": "Request Payload Update",
+        "details": "Support low_stock_threshold during SKU creation.",
+    },
+    {
+        "keywords": ["stock", "inventory", "quantity"],
+        "path": "/skus/{sku_id}",
+        "method": "put",
+        "change_type": "Request Payload Update",
+        "details": "Allow updating low_stock_threshold configuration.",
+    },
+    {
+        "keywords": ["stock", "inventory", "quantity"],
+        "path": "/skus/product/{product_id}",
+        "change_type": "Response Contract Update",
+        "details": "Expose low stock status and threshold information.",
+    },
+    {
+        "keywords": ["stock", "inventory", "quantity"],
+        "path": "/products",
+        "change_type": "Response Contract Update",
+        "details": "Product listings may expose stock status.",
+    },
+    {
+        "keywords": ["stock", "inventory", "quantity"],
+        "path": "/products/{product_id}",
+        "change_type": "Response Contract Update",
+        "details": "Product details may expose stock status.",
+    },
+]
+
+
+class EndpointAnalyzer:
+
+    def analyze(
+        self,
+        requirement: str,
+        endpoints: list,
+    ) -> list[ApiMutation]:
+
+        requirement = requirement.lower()
+        impacts: list[ApiMutation] = []
+
+        for endpoint in endpoints:
+
+            path = endpoint["path"]
+
+            methods = {
+                method.lower()
+                for method in endpoint["methods"]
+            }
+
+            if self._ignore_endpoint(path):
+                continue
+
+            for rule in ENDPOINT_RULES:
+
+                if not self._matches_requirement(
+                    requirement,
+                    rule["keywords"],
+                ):
+                    continue
+
+                if path != rule["path"]:
+                    continue
+
+                required_method = rule.get("method")
+
+                if required_method and required_method not in methods:
+                    continue
+
+                impacts.append(
+                    ApiMutation(
+                        endpoint=path,
+                        change_type=rule["change_type"],
+                        details=rule["details"],
+                    )
+                )
+
         return impacts
 
-    for endpoint in endpoints:
+    def _matches_requirement(
+        self,
+        requirement: str,
+        keywords: list[str],
+    ) -> bool:
 
-        path = endpoint["path"]
-        methods = endpoint["methods"]
+        return any(
+            keyword in requirement
+            for keyword in keywords
+        )
 
-        # Ignore engineering endpoints
-        if path.startswith("/engineering"):
-            continue
+    def _ignore_endpoint(
+        self,
+        path: str,
+    ) -> bool:
 
-        # Ignore category endpoints
-        if path.startswith("/categories"):
-            continue
+        return (
+            path.startswith("/engineering")
+            or path.startswith("/categories")
+        )
 
-        # SKU endpoints
-        if path == "/skus":
 
-            if "post" in methods:
-                impacts.append({
-                    "endpoint": path,
-                    "change_type": "Request Payload Update",
-                    "details": "Support low_stock_threshold during SKU creation."
-                })
+def analyze_endpoints(
+    requirement: str,
+    endpoints: list,
+) -> list[ApiMutation]:
 
-        elif path == "/skus/{sku_id}":
+    analyzer = EndpointAnalyzer()
 
-            if "put" in methods:
-                impacts.append({
-                    "endpoint": path,
-                    "change_type": "Request Payload Update",
-                    "details": "Allow updating low stock threshold configuration."
-                })
-
-        elif path == "/skus/product/{product_id}":
-
-            impacts.append({
-                "endpoint": path,
-                "change_type": "Response Contract Update",
-                "details": "Expose low stock status and threshold information."
-            })
-
-        elif path == "/products":
-
-            impacts.append({
-                "endpoint": path,
-                "change_type": "Response Contract Update",
-                "details": "Product listings may expose stock status."
-            })
-
-        elif path == "/products/{product_id}":
-
-            impacts.append({
-                "endpoint": path,
-                "change_type": "Response Contract Update",
-                "details": "Product details may expose stock status."
-            })
-
-    return impacts
+    return analyzer.analyze(
+        requirement,
+        endpoints,
+    )
