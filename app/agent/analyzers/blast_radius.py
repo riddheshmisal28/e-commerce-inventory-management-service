@@ -1,4 +1,7 @@
-from models import BlastRadius
+from models import (
+    AnalysisContext,
+    BlastRadius,
+)
 
 
 BLAST_RADIUS_RULES = [
@@ -19,17 +22,16 @@ class BlastRadiusAnalyzer:
 
     def analyze(
         self,
-        entity_impacts,
-        endpoint_impacts,
-    ) -> list[BlastRadius]:
+        ctx: AnalysisContext,
+    ) -> None:
 
-        blast_radius = []
+        blast_radius: list[BlastRadius] = []
 
         for rule in BLAST_RADIUS_RULES:
 
             if (
                 rule["source"] == "entity"
-                and entity_impacts
+                and ctx.entity_impacts
             ):
 
                 blast_radius.append(
@@ -41,7 +43,7 @@ class BlastRadiusAnalyzer:
 
             elif (
                 rule["source"] == "endpoint"
-                and endpoint_impacts
+                and ctx.endpoint_impacts
             ):
 
                 blast_radius.append(
@@ -51,17 +53,4 @@ class BlastRadiusAnalyzer:
                     )
                 )
 
-        return blast_radius
-
-
-def build_blast_radius(
-    entity_impacts,
-    endpoint_impacts,
-):
-
-    analyzer = BlastRadiusAnalyzer()
-
-    return analyzer.analyze(
-        entity_impacts,
-        endpoint_impacts,
-    )
+        ctx.blast_radius = blast_radius

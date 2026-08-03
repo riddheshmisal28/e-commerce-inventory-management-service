@@ -1,4 +1,4 @@
-from models import Requirement, ContextPlan
+from models import AnalysisContext, ContextPlan
 
 PLANNING_RULES = [
     {
@@ -26,10 +26,10 @@ class RequirementAnalyzer:
 
     def analyze(
         self,
-        requirement: Requirement,
-    ) -> ContextPlan:
+        ctx: AnalysisContext,
+    ) -> None:
 
-        text = self._build_requirement_text(requirement)
+        text = ctx.requirement_text
 
         plan = ContextPlan()
 
@@ -40,30 +40,16 @@ class RequirementAnalyzer:
                 rule=rule,
             )
 
-        # Remove duplicate keywords while preserving order
         plan.keywords = list(dict.fromkeys(plan.keywords))
 
-        return plan
-
-    def _build_requirement_text(
-        self,
-        requirement: Requirement,
-    ) -> str:
-
-        return f"""
-        {requirement.title}
-
-        {requirement.description}
-
-        {' '.join(requirement.acceptance_criteria)}
-        """.lower()
+        ctx.context_plan = plan
 
     def _apply_rule(
         self,
         text: str,
         plan: ContextPlan,
         rule: dict,
-    ):
+    ) -> None:
 
         keywords = rule["keywords"]
 
@@ -86,13 +72,3 @@ class RequirementAnalyzer:
             plan.need_documentation = True
 
         plan.keywords.extend(keywords)
-
-
-def analyze_requirement(
-    requirement: Requirement,
-) -> ContextPlan:
-    """
-    Convenience function so existing callers don't break.
-    """
-    analyzer = RequirementAnalyzer()
-    return analyzer.analyze(requirement)

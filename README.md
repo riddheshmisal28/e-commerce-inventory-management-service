@@ -126,13 +126,18 @@ By integrating `fastapi-mcp`, the application acts as an MCP server. LLMs and de
 
 ### 2. Impact Analysis Agent
 
-Located in the [app/agent](file:///c:/Users/riddhesh.misal/OneDrive%20-%20Talentica%20Software%20%28I%29%20Pvt.%20Ltd/Documents/inventory-management-service/app/agent) directory, this is a rule-based engine that processes requirement documents and automatically generates an **Impact Analysis Report** outlining the blast radius of changes.
+Located in the [app/agent](file:///c:/Users/riddhesh.misal/OneDrive%20-%20Talentica%20Software%20%28I%29%20Pvt.%20Ltd/Documents/inventory-management-service/app/agent) directory, this is a modular, object-oriented pipeline engine that processes requirement documents and automatically generates an **Impact Analysis Report** outlining the blast radius of changes.
 
-#### Pipeline Flow:
-1. **Analyze Requirement**: The agent parses the requirement details (using the `Requirement` model in [models.py](file:///c:/Users/riddhesh.misal/OneDrive%20-%20Talentica%20Software%20%28I%29%20Pvt.%20Ltd/Documents/inventory-management-service/app/agent/models.py)) and formulates a `ContextPlan`.
-2. **Context Retrieval**: Queries the running FastAPI app via the Engineering Context client [context_client.py](file:///c:/Users/riddhesh.misal/OneDrive%20-%20Talentica%20Software%20%28I%29%20Pvt.%20Ltd/Documents/inventory-management-service/app/agent/context_client.py) to retrieve active endpoints, DB entities, and SQLAlchemy models.
-3. **Impact Mapping**: Evaluates database schema impacts (`analyze_entities`) and API mutations (`analyze_endpoints`).
-4. **Report Generation**: Builds the `ImpactAnalysisReport` containing:
+#### Pipeline Architecture & Flow:
+
+The `ImpactAgent` orchestrates a modular multi-component pipeline. Each phase operates on a shared `AnalysisContext` state object:
+
+1. **Requirement Analysis (`RequirementAnalyzer`)**: Analyzes requirement details (using the `Requirement` model in [models.py](file:///c:/Users/riddhesh.misal/OneDrive%20-%20Talentica%20Software%20%28I%29%20Pvt.%20Ltd/Documents/inventory-management-service/app/agent/models.py)) and formulates a `ContextPlan`.
+2. **Context Retrieval (`ContextRetriever`)**: Queries the running FastAPI app via [context_client.py](file:///c:/Users/riddhesh.misal/OneDrive%20-%20Talentica%20Software%20%28I%29%20Pvt.%20Ltd/Documents/inventory-management-service/app/agent/context_client.py) to retrieve active endpoints, DB entities, and SQLAlchemy models into `ctx.engineering_context`.
+3. **Data Model Analysis (`EntityAnalyzer`)**: Evaluates database schema impacts (`ctx.entity_impacts`).
+4. **API Interface Analysis (`EndpointAnalyzer`)**: Evaluates API route and endpoint mutations (`ctx.endpoint_impacts`).
+5. **Blast Radius Analysis (`BlastRadiusAnalyzer`)**: Aggregates entity and endpoint impacts to build `ctx.blast_radius`.
+6. **Report Generation (`ReportBuilder`)**: Assembles all findings into an `ImpactAnalysisReport` containing:
    - **Feature Summary**: Clear business goals.
    - **Component Blast Radius**: Impacted system components.
    - **Data Model Impact**: Database schema updates.

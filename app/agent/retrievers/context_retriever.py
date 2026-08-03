@@ -1,18 +1,36 @@
 from context_client import EngineeringContextClient
-from models import EngineeringContext
+from models import AnalysisContext, EngineeringContext
 
-client = EngineeringContextClient()
 
-def retrieve_context(plan) -> EngineeringContext:
-    context = EngineeringContext()
+class ContextRetriever:
 
-    if plan.need_entities:
-        context.entities = client.get_entities()
+    def __init__(self):
+        self.client = EngineeringContextClient()
 
-    if plan.need_endpoints:
-        context.endpoints = client.get_endpoints()
+    def retrieve(
+        self,
+        ctx: AnalysisContext,
+    ) -> None:
 
-    if plan.need_models:
-        context.models = client.get_models()
+        plan = ctx.context_plan
 
-    return context
+        if plan is None:
+            raise ValueError(
+                "ContextPlan must be generated before retrieving context."
+            )
+
+        context = EngineeringContext()
+
+        if plan.need_entities:
+            context.entities = self.client.get_entities()
+            context.retrieved_sources.append("entities")
+
+        if plan.need_endpoints:
+            context.endpoints = self.client.get_endpoints()
+            context.retrieved_sources.append("endpoints")
+
+        if plan.need_models:
+            context.models = self.client.get_models()
+            context.retrieved_sources.append("models")
+
+        ctx.engineering_context = context

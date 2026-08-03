@@ -60,6 +60,22 @@ class EngineeringContext(BaseModel):
 
 class AnalysisContext(BaseModel):
     requirement: Requirement
-    engineering_context: EngineeringContext
+    context_plan: ContextPlan | None = None
+    engineering_context: EngineeringContext = Field(
+        default_factory=EngineeringContext
+    )
     entity_impacts: list[DataModelImpact] = Field(default_factory=list)
     endpoint_impacts: list[ApiMutation] = Field(default_factory=list)
+    blast_radius: list[BlastRadius] = Field(default_factory=list)
+    report: ImpactAnalysisReport | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    @property
+    def requirement_text(self) -> str:
+        return f"""
+        {self.requirement.title}
+
+        {self.requirement.description}
+
+        {' '.join(self.requirement.acceptance_criteria)}
+        """.lower()
+

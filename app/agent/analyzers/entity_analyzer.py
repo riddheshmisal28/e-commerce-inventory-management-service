@@ -1,4 +1,7 @@
-from models import DataModelImpact
+from models import (
+    AnalysisContext,
+    DataModelImpact,
+)
 
 
 ENTITY_RULES = [
@@ -18,15 +21,14 @@ class EntityAnalyzer:
 
     def analyze(
         self,
-        requirement: str,
-        entities: list,
-    ) -> list[DataModelImpact]:
+        ctx: AnalysisContext,
+    ) -> None:
 
-        requirement = requirement.lower()
+        requirement = self._build_requirement_text(ctx)
 
         impacts: list[DataModelImpact] = []
 
-        for entity in entities:
+        for entity in ctx.engineering_context.entities:
 
             entity_name = entity["name"]
 
@@ -56,7 +58,22 @@ class EntityAnalyzer:
                     )
                 )
 
-        return impacts
+        ctx.entity_impacts = impacts
+
+    def _build_requirement_text(
+        self,
+        ctx: AnalysisContext,
+    ) -> str:
+
+        requirement = ctx.requirement
+
+        return f"""
+        {requirement.title}
+
+        {requirement.description}
+
+        {' '.join(requirement.acceptance_criteria)}
+        """.lower()
 
     def _matches_requirement(
         self,
@@ -93,16 +110,3 @@ class EntityAnalyzer:
             )
             for change in changes
         ]
-
-
-def analyze_entities(
-    requirement: str,
-    entities: list,
-) -> list[DataModelImpact]:
-
-    analyzer = EntityAnalyzer()
-
-    return analyzer.analyze(
-        requirement,
-        entities,
-    )

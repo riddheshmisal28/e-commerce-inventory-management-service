@@ -1,113 +1,41 @@
 from models import (
-    ImpactAnalysisReport,
-    Requirement
-)
-from builders.feature_summary_builder import (
-    build_feature_summary
+    AnalysisContext,
+    Requirement,
 )
 
-from builders.clarification_builder import (
-    build_clarification_questions
-)
+from analyzers.requirement_analyzer import RequirementAnalyzer
+from retrievers.context_retriever import ContextRetriever
+from analyzers.entity_analyzer import EntityAnalyzer
+from analyzers.endpoint_analyzer import EndpointAnalyzer
+from analyzers.blast_radius import BlastRadiusAnalyzer
 
-from builders.test_scenario_builder import (
-    build_test_scenarios
-)
-
-from builders.bdd_builder import (
-    build_bdd_scenarios
-)
-
-from analyzers.entity_analyzer import analyze_entities
-from analyzers.endpoint_analyzer import analyze_endpoints
-from analyzers.blast_radius import build_blast_radius
-from analyzers.requirement_analyzer import analyze_requirement
-
-from retrievers.context_retriever import retrieve_context
-
-
-def build_requirement_text(
-    requirement: Requirement
-) -> str:
-    return f"""
-    {requirement.title}
-
-    {requirement.description}
-
-    {' '.join(requirement.acceptance_criteria)}
-    """
+from builders.report_builder import ReportBuilder
 
 class ImpactAgent:
 
+    def __init__(self):
+
+        self.planner = RequirementAnalyzer()
+        self.retriever = ContextRetriever()
+        self.entity_analyzer = EntityAnalyzer()
+        self.endpoint_analyzer = EndpointAnalyzer()
+        self.blast_radius_analyzer = BlastRadiusAnalyzer()
+        self.report_builder = ReportBuilder()
+
     def run(
         self,
-        requirement: Requirement
+        requirement: Requirement,
     ):
 
-        plan = analyze_requirement(
-            requirement
-        )
+        ctx = AnalysisContext(requirement=requirement)
 
-        context = retrieve_context(
-            plan
-        )
+        self.planner.analyze(ctx)
+        self.retriever.retrieve(ctx)
+        self.entity_analyzer.analyze(ctx)
+        self.endpoint_analyzer.analyze(ctx)
+        self.blast_radius_analyzer.analyze(ctx)
+        return self.report_builder.build(ctx)
 
-        requirement_text = build_requirement_text(
-            requirement
-        )
-
-        entity_impacts = analyze_entities(
-            requirement_text,
-            context.entities
-        )
-
-        endpoint_impacts = analyze_endpoints(
-            requirement_text,
-            context.endpoints
-        )
-
-        feature_summary = (
-            build_feature_summary(
-                requirement
-            )
-        )
-
-        clarification_questions = (
-            build_clarification_questions(
-                requirement
-            )
-        )
-
-        test_scenarios = (
-            build_test_scenarios(
-                requirement
-            )
-        )
-
-        bdd_scenarios = (
-            build_bdd_scenarios(
-                requirement
-            )
-        )
-
-        blast_radius = (
-            build_blast_radius(
-                entity_impacts,
-                endpoint_impacts
-            )
-        )
-
-        report = ImpactAnalysisReport(
-            feature_summary=feature_summary,
-            component_blast_radius=blast_radius,
-            potential_data_model_impact=entity_impacts,
-            api_interface_mutations=endpoint_impacts,
-            clarification_questions=clarification_questions,
-            test_scenarios=test_scenarios,
-            bdd_scenarios=bdd_scenarios
-        )
-
-        return report.model_dump()
 
 if __name__ == "__main__":
 
@@ -121,14 +49,12 @@ if __name__ == "__main__":
             "Alert should trigger when quantity is below threshold.",
             "Alert should not trigger for inactive products.",
             "Threshold should be configurable per SKU.",
-            "Duplicate alerts should not be generated within 24 hours."
-        ]
+            "Duplicate alerts should not be generated within 24 hours.",
+        ],
     )
 
     agent = ImpactAgent()
 
-    result = agent.run(
-        requirement
-    )
+    result = agent.run(requirement)
 
     print(result)

@@ -1,4 +1,7 @@
-from models import ApiMutation
+from models import (
+    AnalysisContext,
+    ApiMutation,
+)
 
 
 ENDPOINT_RULES = [
@@ -41,14 +44,14 @@ class EndpointAnalyzer:
 
     def analyze(
         self,
-        requirement: str,
-        endpoints: list,
-    ) -> list[ApiMutation]:
+        ctx: AnalysisContext,
+    ) -> None:
 
-        requirement = requirement.lower()
+        requirement = ctx.requirement_text
+
         impacts: list[ApiMutation] = []
 
-        for endpoint in endpoints:
+        for endpoint in ctx.engineering_context.endpoints:
 
             path = endpoint["path"]
 
@@ -84,7 +87,7 @@ class EndpointAnalyzer:
                     )
                 )
 
-        return impacts
+        ctx.endpoint_impacts = impacts
 
     def _matches_requirement(
         self,
@@ -106,16 +109,3 @@ class EndpointAnalyzer:
             path.startswith("/engineering")
             or path.startswith("/categories")
         )
-
-
-def analyze_endpoints(
-    requirement: str,
-    endpoints: list,
-) -> list[ApiMutation]:
-
-    analyzer = EndpointAnalyzer()
-
-    return analyzer.analyze(
-        requirement,
-        endpoints,
-    )
