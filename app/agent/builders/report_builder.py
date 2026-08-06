@@ -1,3 +1,4 @@
+from core.agent_step import AgentStep
 from models import (
     AnalysisContext,
     ImpactAnalysisReport,
@@ -9,12 +10,14 @@ from builders.test_scenario_builder import build_test_scenarios
 from builders.bdd_builder import build_bdd_scenarios
 
 
-class ReportBuilder:
+class ReportBuilder(AgentStep):
 
-    def build(
+    name = "Report Builder"
+
+    def execute(
         self,
         ctx: AnalysisContext,
-    ) -> ImpactAnalysisReport:
+    ):
 
         ctx.report = ImpactAnalysisReport(
             feature_summary=build_feature_summary(

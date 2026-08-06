@@ -62,8 +62,7 @@ def create_app() -> FastAPI:
     app.include_router(engineering_router)
 
     mcp = FastApiMCP(
-        app,
-        name="Inventory Management MCP"
+        app
     )
     mcp.mount()
 

@@ -1,3 +1,4 @@
+from core.agent_step import AgentStep
 from models import (
     AnalysisContext,
     ApiMutation,
@@ -40,9 +41,11 @@ ENDPOINT_RULES = [
 ]
 
 
-class EndpointAnalyzer:
+class EndpointAnalyzer(AgentStep):
 
-    def analyze(
+    name = "Endpoint Analyzer"
+
+    def execute(
         self,
         ctx: AnalysisContext,
     ) -> None:

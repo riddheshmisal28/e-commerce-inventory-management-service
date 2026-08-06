@@ -8,33 +8,41 @@ from retrievers.context_retriever import ContextRetriever
 from analyzers.entity_analyzer import EntityAnalyzer
 from analyzers.endpoint_analyzer import EndpointAnalyzer
 from analyzers.blast_radius import BlastRadiusAnalyzer
-
 from builders.report_builder import ReportBuilder
+
+from core.pipeline_executor import PipelineExecutor
+
 
 class ImpactAgent:
 
     def __init__(self):
 
-        self.planner = RequirementAnalyzer()
-        self.retriever = ContextRetriever()
-        self.entity_analyzer = EntityAnalyzer()
-        self.endpoint_analyzer = EndpointAnalyzer()
-        self.blast_radius_analyzer = BlastRadiusAnalyzer()
-        self.report_builder = ReportBuilder()
+        self.executor = PipelineExecutor()
+
+        self.pipeline = [
+            RequirementAnalyzer(),
+            ContextRetriever(),
+            EntityAnalyzer(),
+            EndpointAnalyzer(),
+            BlastRadiusAnalyzer(),
+            ReportBuilder(),
+        ]
 
     def run(
         self,
         requirement: Requirement,
     ):
 
-        ctx = AnalysisContext(requirement=requirement)
+        ctx = AnalysisContext(
+            requirement=requirement,
+        )
 
-        self.planner.analyze(ctx)
-        self.retriever.retrieve(ctx)
-        self.entity_analyzer.analyze(ctx)
-        self.endpoint_analyzer.analyze(ctx)
-        self.blast_radius_analyzer.analyze(ctx)
-        return self.report_builder.build(ctx)
+        result = self.executor.run(
+            self.pipeline,
+            ctx,
+        )
+
+        return result
 
 
 if __name__ == "__main__":
@@ -55,6 +63,8 @@ if __name__ == "__main__":
 
     agent = ImpactAgent()
 
-    result = agent.run(requirement)
+    result = agent.run(
+        requirement,
+    )
 
-    print(result)
+    print(result.model_dump())

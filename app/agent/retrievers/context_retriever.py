@@ -1,13 +1,16 @@
+from core.agent_step import AgentStep
 from context_client import EngineeringContextClient
 from models import AnalysisContext, EngineeringContext
 
 
-class ContextRetriever:
+class ContextRetriever(AgentStep):
+
+    name = "Context Retriever"
 
     def __init__(self):
         self.client = EngineeringContextClient()
 
-    def retrieve(
+    def execute(
         self,
         ctx: AnalysisContext,
     ) -> None:

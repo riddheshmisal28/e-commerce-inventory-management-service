@@ -1,3 +1,4 @@
+from core.agent_step import AgentStep
 from models import (
     AnalysisContext,
     DataModelImpact,
@@ -17,9 +18,11 @@ ENTITY_RULES = [
 ]
 
 
-class EntityAnalyzer:
+class EntityAnalyzer(AgentStep):
 
-    def analyze(
+    name = "Entity Analyzer"
+
+    def execute(
         self,
         ctx: AnalysisContext,
     ) -> None:

@@ -1,3 +1,4 @@
+from core.agent_step import AgentStep
 from models import (
     AnalysisContext,
     BlastRadius,
@@ -18,9 +19,11 @@ BLAST_RADIUS_RULES = [
 ]
 
 
-class BlastRadiusAnalyzer:
+class BlastRadiusAnalyzer(AgentStep):
 
-    def analyze(
+    name = "Blast Radius Analyzer"
+
+    def execute(
         self,
         ctx: AnalysisContext,
     ) -> None:

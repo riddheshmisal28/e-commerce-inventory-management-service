@@ -69,6 +69,9 @@ class AnalysisContext(BaseModel):
     blast_radius: list[BlastRadius] = Field(default_factory=list)
     report: ImpactAnalysisReport | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    execution_history: list[str] = Field(default_factory=list)
+    execution_metrics: dict[str, float] = Field(default_factory=dict)
+    pipeline_result: PipelineResult | None = None
     @property
     def requirement_text(self) -> str:
         return f"""
@@ -78,4 +81,12 @@ class AnalysisContext(BaseModel):
 
         {' '.join(self.requirement.acceptance_criteria)}
         """.lower()
+
+class PipelineResult(BaseModel):
+    success: bool
+    total_duration_ms: float
+    executed_steps: list[str] = Field(default_factory=list)
+    execution_metrics: dict[str, float] = Field(default_factory=dict)
+    report: ImpactAnalysisReport | None = None
+    error: str | None = None
 

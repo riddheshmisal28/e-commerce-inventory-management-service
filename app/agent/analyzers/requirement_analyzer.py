@@ -1,3 +1,4 @@
+from core.agent_step import AgentStep
 from models import AnalysisContext, ContextPlan
 
 PLANNING_RULES = [
@@ -22,9 +23,11 @@ PLANNING_RULES = [
 ]
 
 
-class RequirementAnalyzer:
+class RequirementAnalyzer(AgentStep):
 
-    def analyze(
+    name = "Requirement Planner"
+
+    def execute(
         self,
         ctx: AnalysisContext,
     ) -> None:
