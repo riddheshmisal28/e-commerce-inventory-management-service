@@ -1,5 +1,5 @@
-from core.agent_step import AgentStep
-from models import AnalysisContext, ContextPlan
+from app.agent.core.agent_step import AgentStep
+from app.agent.models import AnalysisContext, ContextPlan
 
 PLANNING_RULES = [
     {

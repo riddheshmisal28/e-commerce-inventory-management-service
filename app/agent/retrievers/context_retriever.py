@@ -1,6 +1,6 @@
-from core.agent_step import AgentStep
-from context_client import EngineeringContextClient
-from models import AnalysisContext, EngineeringContext
+from app.agent.core.agent_step import AgentStep
+from app.agent.context_client import EngineeringContextClient
+from app.agent.models import AnalysisContext, EngineeringContext
 
 
 class ContextRetriever(AgentStep):

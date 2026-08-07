@@ -1,11 +1,13 @@
 import time
 
-from core.agent_step import AgentStep
-from core.logger import logger
-from models import (
+from app.agent.core.agent_step import AgentStep
+from app.core.logger import get_logger
+from app.agent.models import (
     AnalysisContext,
     PipelineResult,
 )
+
+logger = get_logger(__name__)
 
 
 class PipelineExecutor:

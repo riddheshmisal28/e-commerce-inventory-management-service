@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from models import AnalysisContext
+from app.agent.models import AnalysisContext
 
 
 class AgentStep(ABC):

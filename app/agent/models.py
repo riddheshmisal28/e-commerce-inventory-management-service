@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import Any
 
@@ -71,6 +72,7 @@ class AnalysisContext(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     execution_history: list[str] = Field(default_factory=list)
     execution_metrics: dict[str, float] = Field(default_factory=dict)
+    llm_interactions: list[LLMInteraction] = Field(default_factory=list)
     pipeline_result: PipelineResult | None = None
     @property
     def requirement_text(self) -> str:
@@ -90,3 +92,17 @@ class PipelineResult(BaseModel):
     report: ImpactAnalysisReport | None = None
     error: str | None = None
 
+class LLMInteraction(BaseModel):
+    step: str
+    provider: str
+    model: str
+    prompt: str
+    response: str
+    duration_ms: float
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+class LLMResponse(BaseModel):
+    provider: str
+    model: str
+    response: str
+    duration_ms: float

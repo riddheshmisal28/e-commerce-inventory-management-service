@@ -1,16 +1,24 @@
-from models import (
+import sys
+from pathlib import Path
+
+root_dir = Path(__file__).resolve().parents[2]
+if str(root_dir) not in sys.path:
+    sys.path.insert(0, str(root_dir))
+
+from app.agent.models import (
     AnalysisContext,
     Requirement,
 )
 
-from analyzers.requirement_analyzer import RequirementAnalyzer
-from retrievers.context_retriever import ContextRetriever
-from analyzers.entity_analyzer import EntityAnalyzer
-from analyzers.endpoint_analyzer import EndpointAnalyzer
-from analyzers.blast_radius import BlastRadiusAnalyzer
-from builders.report_builder import ReportBuilder
+from app.agent.llm.analyzers.llm_requirement_planner import LLMRequirementPlanner
+from app.agent.retrievers.context_retriever import ContextRetriever
+from app.agent.analyzers.entity_analyzer import EntityAnalyzer
+from app.agent.analyzers.endpoint_analyzer import EndpointAnalyzer
+from app.agent.analyzers.blast_radius import BlastRadiusAnalyzer
+from app.agent.builders.report_builder import ReportBuilder
 
-from core.pipeline_executor import PipelineExecutor
+from app.agent.core.pipeline_executor import PipelineExecutor
+
 
 
 class ImpactAgent:
@@ -20,7 +28,7 @@ class ImpactAgent:
         self.executor = PipelineExecutor()
 
         self.pipeline = [
-            RequirementAnalyzer(),
+            LLMRequirementPlanner(),
             ContextRetriever(),
             EntityAnalyzer(),
             EndpointAnalyzer(),

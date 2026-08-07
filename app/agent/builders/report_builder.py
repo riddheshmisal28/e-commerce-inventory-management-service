@@ -1,13 +1,13 @@
-from core.agent_step import AgentStep
-from models import (
+from app.agent.core.agent_step import AgentStep
+from app.agent.models import (
     AnalysisContext,
     ImpactAnalysisReport,
 )
 
-from builders.feature_summary_builder import build_feature_summary
-from builders.clarification_builder import build_clarification_questions
-from builders.test_scenario_builder import build_test_scenarios
-from builders.bdd_builder import build_bdd_scenarios
+from app.agent.builders.feature_summary_builder import build_feature_summary
+from app.agent.builders.clarification_builder import build_clarification_questions
+from app.agent.builders.test_scenario_builder import build_test_scenarios
+from app.agent.builders.bdd_builder import build_bdd_scenarios
 
 
 class ReportBuilder(AgentStep):
