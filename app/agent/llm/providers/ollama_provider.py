@@ -43,5 +43,6 @@ class OllamaProvider(BaseLLMProvider):
         data = response.json()
 
         logger.info("Response: %s", data["response"])
+        print(data["response"])
 
         return data["response"]

@@ -4,19 +4,23 @@ from app.agent.models import (
     DataModelImpact,
 )
 
-
 ENTITY_RULES = [
     {
-        "keywords": ["stock", "inventory", "quantity"],
-        "required_columns": ["quantity"],
+        "keywords": [
+            "stock",
+            "inventory",
+            "quantity",
+        ],
+        "required_columns": [
+            "quantity",
+        ],
         "impacts": [
             "Inventory quantity tracking exists. Low stock alert evaluation logic may be required.",
             "Consider adding low_stock_threshold configuration.",
             "Consider storing last_alert_timestamp to avoid duplicate notifications.",
         ],
-    },
+    },  
 ]
-
 
 class EntityAnalyzer(AgentStep):
 
@@ -27,17 +31,25 @@ class EntityAnalyzer(AgentStep):
         ctx: AnalysisContext,
     ) -> None:
 
-        requirement = self._build_requirement_text(ctx)
+        requirement = self._build_requirement_text(
+            ctx,
+        )
 
         impacts: list[DataModelImpact] = []
 
         for entity in ctx.engineering_context.entities:
 
-            entity_name = entity["name"]
+            entity_name = entity.get(
+                "name",
+                "",
+            )
 
             columns = {
                 column.lower()
-                for column in entity["columns"]
+                for column in entity.get(
+                    "columns",
+                    [],
+                )
             }
 
             for rule in ENTITY_RULES:
@@ -85,7 +97,7 @@ class EntityAnalyzer(AgentStep):
     ) -> bool:
 
         return any(
-            keyword in requirement
+            keyword.lower() in requirement
             for keyword in keywords
         )
 
@@ -96,7 +108,7 @@ class EntityAnalyzer(AgentStep):
     ) -> bool:
 
         return all(
-            column in columns
+            column.lower() in columns
             for column in required_columns
         )
 

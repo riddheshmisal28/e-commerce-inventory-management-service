@@ -2,26 +2,99 @@ from app.agent.core.agent_step import AgentStep
 from app.agent.models import AnalysisContext, ContextPlan
 
 PLANNING_RULES = [
-    {
-        "keywords": ["stock", "inventory", "quantity", "sku"],
-        "need_entities": True,
-        "need_endpoints": True,
+{
+    "keywords": [
+        "stock",
+        "inventory",
+        "quantity",
+        "sku",
+    ],
+    "need_entities": True,
+    "need_endpoints": True,
+    "need_business_logic": True,
+    "need_repositories": True,
+},
+{
+    "keywords": [
+        "product",
+    ],
+    "need_entities": True,
+    "need_endpoints": True,
+    "need_business_logic": True,
+    "need_repositories": True,
+},
+{
+    "keywords": [
+        "category",
+    ],
+    "need_entities": True,
+    "need_repositories": True,
+},
+{
+    "keywords": [
+        "api",
+        "request",
+        "response",
+        "endpoint",
+    ],
+    "need_endpoints": True,
+    "need_models": True,
+    "need_openapi": True,
+},
+{
+    "keywords": [
+        "validation",
+        "validate",
+        "rule",
+        "business",
+        "logic",
+        "calculation",
+        "calculate",
+        "workflow",
+        "condition",
+    ],
+    "need_business_logic": True,
+},
+{
+    "keywords": [
+        "repository",
+        "query",
+        "database",
+        "crud",
+        "fetch",
+        "retrieve",
+        "persist",
+        "save",
+        "update",
+        "delete",
+    ],
+    "need_repositories": True,
     },
     {
-        "keywords": ["product"],
-        "need_entities": True,
-        "need_endpoints": True,
+    "keywords": [
+        "email",
+        "sms",
+        "notification",
+        "webhook",
+        "external",
+        "third-party",
+        "integration",
+        "payment",
+        "provider",
+    ],
+    "need_integrations": True,
     },
     {
-        "keywords": ["category"],
-        "need_entities": True,
-    },
-    {
-        "keywords": ["api", "request", "response", "endpoint"],
-        "need_endpoints": True,
+    "keywords": [
+        "documentation",
+        "architecture",
+        "design",
+        "adr",
+        "system",
+    ],
+    "need_documentation": True,
     },
 ]
-
 
 class RequirementAnalyzer(AgentStep):
 
@@ -32,7 +105,7 @@ class RequirementAnalyzer(AgentStep):
         ctx: AnalysisContext,
     ) -> None:
 
-        text = ctx.requirement_text
+        text = ctx.requirement_text.lower()
 
         plan = ContextPlan()
 
@@ -43,7 +116,9 @@ class RequirementAnalyzer(AgentStep):
                 rule=rule,
             )
 
-        plan.keywords = list(dict.fromkeys(plan.keywords))
+        plan.keywords = list(
+            dict.fromkeys(plan.keywords)
+        )
 
         ctx.context_plan = plan
 
@@ -56,7 +131,13 @@ class RequirementAnalyzer(AgentStep):
 
         keywords = rule["keywords"]
 
-        if not any(keyword in text for keyword in keywords):
+        matched_keywords = [
+            keyword
+            for keyword in keywords
+            if keyword in text
+        ]
+
+        if not matched_keywords:
             return
 
         if rule.get("need_entities"):
@@ -71,7 +152,18 @@ class RequirementAnalyzer(AgentStep):
         if rule.get("need_openapi"):
             plan.need_openapi = True
 
+        if rule.get("need_business_logic"):
+            plan.need_business_logic = True
+
+        if rule.get("need_repositories"):
+            plan.need_repositories = True
+
+        if rule.get("need_integrations"):
+            plan.need_integrations = True
+
         if rule.get("need_documentation"):
             plan.need_documentation = True
 
-        plan.keywords.extend(keywords)
+        plan.keywords.extend(
+            matched_keywords
+        )
