@@ -230,13 +230,16 @@ def get_business_logic(
 
     return [
         {
-            "component": item["file"],
+            "component": item["name"],
+            "file": item["file"],
+            "type": item["type"],
+            "line": item["line"],
+            "keywords": item["keywords"],
             "change": (
                 "Business logic may be affected because "
-                f"the source references: "
-                f"{', '.join(item['keywords'])}."
+                f"{item['type']} '{item['name']}' "
+                "references relevant requirement concepts."
             ),
-            "keywords": item["keywords"],
         }
         for item in results
     ]
@@ -305,3 +308,13 @@ keywords: str | None,
         for keyword in keywords.split(",")
         if keyword.strip()
     ]
+
+@router.get("/components")
+def get_components(
+    self,
+    keywords: list[str] | None = None,
+):
+    return self._get_with_keywords(
+        "/engineering/components",
+        keywords,
+    )

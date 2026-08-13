@@ -2,7 +2,7 @@ from app.agent.core.agent_step import AgentStep
 
 from app.agent.models import (
     AnalysisContext,
-    BusinessLogicImpact,
+    ComponentImpact,
 )
 
 
@@ -15,9 +15,7 @@ class BusinessLogicAnalyzer(AgentStep):
         ctx: AnalysisContext,
     ) -> None:
 
-        impacts: list[BusinessLogicImpact] = []
-
-        requirement = ctx.requirement_text
+        impacts: list[ComponentImpact] = []
 
         keywords = (
             ctx.context_plan.keywords
@@ -40,15 +38,16 @@ class BusinessLogicAnalyzer(AgentStep):
             if not self._is_relevant(
                 component=component,
                 change=change,
-                requirement=requirement,
                 keywords=keywords,
             ):
                 continue
 
             impacts.append(
-                BusinessLogicImpact(
+                ComponentImpact(
                     component=component,
+                    impact_type="Business Logic",
                     change=change,
+                    reason=item.get("reason"),
                 )
             )
 
@@ -58,7 +57,6 @@ class BusinessLogicAnalyzer(AgentStep):
         self,
         component: str,
         change: str,
-        requirement: str,
         keywords: list[str],
     ) -> bool:
 
@@ -66,23 +64,7 @@ class BusinessLogicAnalyzer(AgentStep):
             f"{component} {change}"
         ).lower()
 
-        if any(
+        return any(
             keyword.lower() in context
             for keyword in keywords
-        ):
-            return True
-
-        requirement_keywords = [
-            "stock",
-            "inventory",
-            "quantity",
-            "threshold",
-            "alert",
-            "notification",
-        ]
-
-        return any(
-            keyword in requirement
-            and keyword in context
-            for keyword in requirement_keywords
         )

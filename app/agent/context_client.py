@@ -6,7 +6,7 @@ class EngineeringContextClient:
     def __init__(
         self,
         base_url: str = "http://localhost:8000",
-        timeout: int = 5,
+        timeout: int = 60,
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout

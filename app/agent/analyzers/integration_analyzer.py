@@ -2,7 +2,7 @@ from app.agent.core.agent_step import AgentStep
 
 from app.agent.models import (
     AnalysisContext,
-    IntegrationImpact,
+    ComponentImpact,
 )
 
 
@@ -15,7 +15,13 @@ class IntegrationAnalyzer(AgentStep):
         ctx: AnalysisContext,
     ) -> None:
 
-        impacts: list[IntegrationImpact] = []
+        impacts: list[ComponentImpact] = []
+
+        keywords = (
+            ctx.context_plan.keywords
+            if ctx.context_plan
+            else []
+        )
 
         for item in ctx.engineering_context.integrations:
 
@@ -29,11 +35,36 @@ class IntegrationAnalyzer(AgentStep):
             if not change:
                 continue
 
+            if not self._is_relevant(
+                integration=integration,
+                change=change,
+                keywords=keywords,
+            ):
+                continue
+
             impacts.append(
-                IntegrationImpact(
-                    integration=integration,
+                ComponentImpact(
+                    component=integration,
+                    impact_type="Integration",
                     change=change,
+                    reason=item.get("reason"),
                 )
             )
 
         ctx.integration_impacts = impacts
+
+    def _is_relevant(
+        self,
+        integration: str,
+        change: str,
+        keywords: list[str],
+    ) -> bool:
+
+        context = (
+            f"{integration} {change}"
+        ).lower()
+
+        return any(
+            keyword.lower() in context
+            for keyword in keywords
+        )

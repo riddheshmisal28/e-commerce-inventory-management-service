@@ -142,4 +142,18 @@ class ContextRetriever(AgentStep):
                 "documentation",
             )
 
+
+        # ---------------------------------------------------------
+        # Engineering components
+        # ---------------------------------------------------------
+
+        if plan.need_components:
+
+            context.components = self.client.get_components(
+                keywords=plan.keywords,
+            )
+
+            context.retrieved_sources.append(
+                "components",
+            )
         ctx.engineering_context = context

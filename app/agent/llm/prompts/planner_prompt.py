@@ -54,6 +54,7 @@ class PlannerPromptBuilder:
     "need_repositories": false,
     "need_integrations": false,
     "need_documentation": false,
+    "need_components": false,
     "keywords": []
     }}
 
@@ -230,6 +231,27 @@ class PlannerPromptBuilder:
     Set this to true when the requirement depends on architectural
     decisions, documented workflows, or system behavior that cannot
     reasonably be understood from the other engineering context.
+
+    * need_components:
+
+    True when generic application or architectural components
+    are relevant to the requirement.
+
+    This includes:
+
+    * Background workers
+    * Schedulers
+    * Notification services
+    * Event processors
+    * Message queues
+    * Caches
+    * Configuration services
+    * Internal application components
+    * Other architectural components
+
+    Do not set this to true when the requirement is fully covered
+    by entities, endpoints, models, business logic, repositories,
+    or integrations.
 
     * keywords:
 

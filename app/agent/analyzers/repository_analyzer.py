@@ -2,7 +2,7 @@ from app.agent.core.agent_step import AgentStep
 
 from app.agent.models import (
     AnalysisContext,
-    RepositoryImpact,
+    ComponentImpact,
 )
 
 
@@ -15,9 +15,7 @@ class RepositoryAnalyzer(AgentStep):
         ctx: AnalysisContext,
     ) -> None:
 
-        impacts: list[RepositoryImpact] = []
-
-        requirement = ctx.requirement_text
+        impacts: list[ComponentImpact] = []
 
         keywords = (
             ctx.context_plan.keywords
@@ -40,15 +38,16 @@ class RepositoryAnalyzer(AgentStep):
             if not self._is_relevant(
                 repository=repository,
                 change=change,
-                requirement=requirement,
                 keywords=keywords,
             ):
                 continue
 
             impacts.append(
-                RepositoryImpact(
-                    repository=repository,
+                ComponentImpact(
+                    component=repository,
+                    impact_type="Repository",
                     change=change,
+                    reason=item.get("reason"),
                 )
             )
 
@@ -58,7 +57,6 @@ class RepositoryAnalyzer(AgentStep):
         self,
         repository: str,
         change: str,
-        requirement: str,
         keywords: list[str],
     ) -> bool:
 
@@ -66,25 +64,7 @@ class RepositoryAnalyzer(AgentStep):
             f"{repository} {change}"
         ).lower()
 
-        if any(
+        return any(
             keyword.lower() in context
             for keyword in keywords
-        ):
-            return True
-
-        requirement_keywords = [
-            "stock",
-            "inventory",
-            "quantity",
-            "threshold",
-            "alert",
-            "notification",
-            "sku",
-            "product",
-        ]
-
-        return any(
-            keyword in requirement
-            and keyword in context
-            for keyword in requirement_keywords
         )

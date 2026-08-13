@@ -26,6 +26,10 @@ class ApiMutation(BaseModel):
     change_type: str
     details: str
 
+class ModelImpact(BaseModel):
+    model: str
+    change: str
+
 class ComponentImpact(BaseModel):
     component: str
     impact_type: str
@@ -75,6 +79,7 @@ class ContextPlan(BaseModel):
     need_business_logic: bool = False
     need_repositories: bool = False
     need_integrations: bool = False
+    need_components: bool = False
     need_documentation: bool = False
     keywords: list[str] = Field(
         default_factory=list,
@@ -102,6 +107,9 @@ class EngineeringContext(BaseModel):
     integrations: list[Any] = Field(
         default_factory=list,
     )
+    components: list[Any] = Field(
+        default_factory=list,
+    )
     documentation: list[Any] = Field(
         default_factory=list,
     )
@@ -119,6 +127,18 @@ class AnalysisContext(BaseModel):
         default_factory=list,
     )
     endpoint_impacts: list[ApiMutation] = Field(
+        default_factory=list,
+    )
+    model_impacts: list[ModelImpact] = Field(
+        default_factory=list,
+    )
+    business_logic_impacts: list[ComponentImpact] = Field(
+        default_factory=list,
+    )
+    repository_impacts: list[ComponentImpact] = Field(
+        default_factory=list,
+    )
+    integration_impacts: list[ComponentImpact] = Field(
         default_factory=list,
     )
     component_impacts: list[ComponentImpact] = Field(

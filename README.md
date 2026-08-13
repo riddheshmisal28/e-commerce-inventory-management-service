@@ -1,6 +1,6 @@
 # Inventory Management Service
 
-A FastAPI-based inventory management service with PostgreSQL persistence, Elasticsearch search support, and an agentic/MCP interface for intelligent analysis.
+A FastAPI-based inventory management service with PostgreSQL persistence, Elasticsearch search support, and an agentic/MCP interface for intelligent impact analysis — now powered by LLM-driven planning via Ollama.
 
 ## Features
 
@@ -12,7 +12,7 @@ A FastAPI-based inventory management service with PostgreSQL persistence, Elasti
 - **Correlation ID Middleware**: Structured logging and tracing across services.
 - **Model Context Protocol (MCP)**: Dynamic exposure of application tools and schemas to LLMs.
 - **Engineering Context API**: Special metadata endpoints to inspect database tables, models, and routes.
-- **Agentic Impact Analysis**: A rule-based engine that processes requirement documents to output comprehensive impact reports (blast radius, contract mutations, data schemas, BDD test scenarios).
+- **Agentic Impact Analysis**: A 12-step pipeline engine — with LLM-powered planning and rule-based fallback — that processes requirement documents and produces comprehensive impact reports (blast radius, contract mutations, data schemas, BDD test scenarios).
 
 ## Tech Stack
 
@@ -21,6 +21,8 @@ A FastAPI-based inventory management service with PostgreSQL persistence, Elasti
 - [fastapi-mcp](https://github.com/augmentcode/fastapi-mcp) (Model Context Protocol)
 - **SQLAlchemy** (PostgreSQL database driver)
 - **Elasticsearch** (Search and sync engine)
+- **Ollama** (Local LLM inference — default model: `llama3.2:3b`)
+- **Pydantic** (Data validation & structured output parsing)
 - **Docker / Docker Compose**
 
 ---
@@ -32,6 +34,7 @@ A FastAPI-based inventory management service with PostgreSQL persistence, Elasti
 - Python 3.11
 - Docker
 - Docker Compose
+- [Ollama](https://ollama.com/) (for LLM-powered requirement planning)
 
 ### Install Dependencies
 
@@ -103,7 +106,7 @@ The API is exposed with these top-level routes:
 
 ### Engineering Context (Discovery APIs)
 
-These endpoints provide metadata about the system's endpoints, schemas, and database tables to power LLM analysis. Defined in [api.py](file:///c:/Users/riddhesh.misal/OneDrive%20-%20Talentica%20Software%20%28I%29%20Pvt.%20Ltd/Documents/inventory-management-service/app/engineering/api.py).
+These endpoints provide metadata about the system's endpoints, schemas, and database tables to power LLM analysis. Defined in `app/engineering/api.py`.
 
 - `GET /engineering/openapi` – Get the raw OpenAPI specification
 - `GET /engineering/endpoints` – List all registered API endpoints (paths & methods)
@@ -117,7 +120,7 @@ These endpoints provide metadata about the system's endpoints, schemas, and data
 
 ## Model Context Protocol (MCP) & Impact Agent
 
-This branch introduces Model Context Protocol (MCP) server support and an automated developer sub-agent to analyze codebase impact for new requirements.
+This project includes Model Context Protocol (MCP) server support and an automated developer agent to analyze codebase impact for new requirements.
 
 ### 1. Model Context Protocol (MCP)
 
@@ -126,29 +129,88 @@ By integrating `fastapi-mcp`, the application acts as an MCP server. LLMs and de
 
 ### 2. Impact Analysis Agent
 
-Located in the [app/agent](file:///c:/Users/riddhesh.misal/OneDrive%20-%20Talentica%20Software%20%28I%29%20Pvt.%20Ltd/Documents/inventory-management-service/app/agent) directory, this is a modular, object-oriented pipeline engine that processes requirement documents and automatically generates an **Impact Analysis Report** outlining the blast radius of changes.
+Located in the `app/agent` directory, this is a modular, object-oriented pipeline engine that processes requirement documents and automatically generates an **Impact Analysis Report** outlining the blast radius of changes.
 
-#### Pipeline Architecture & Flow:
+#### Pipeline Architecture & Flow
 
-The `ImpactAgent` orchestrates a modular multi-component pipeline. Each phase operates on a shared `AnalysisContext` state object:
+The `ImpactAgent` orchestrates a **12-step pipeline** via `PipelineExecutor`. Each step implements the `AgentStep` interface, receives a shared `AnalysisContext`, and updates it in place:
 
-1. **Requirement Analysis (`RequirementAnalyzer`)**: Analyzes requirement details (using the `Requirement` model in [models.py](file:///c:/Users/riddhesh.misal/OneDrive%20-%20Talentica%20Software%20%28I%29%20Pvt.%20Ltd/Documents/inventory-management-service/app/agent/models.py)) and formulates a `ContextPlan`.
-2. **Context Retrieval (`ContextRetriever`)**: Queries the running FastAPI app via [context_client.py](file:///c:/Users/riddhesh.misal/OneDrive%20-%20Talentica%20Software%20%28I%29%20Pvt.%20Ltd/Documents/inventory-management-service/app/agent/context_client.py) to retrieve active endpoints, DB entities, and SQLAlchemy models into `ctx.engineering_context`.
-3. **Data Model Analysis (`EntityAnalyzer`)**: Evaluates database schema impacts (`ctx.entity_impacts`).
-4. **API Interface Analysis (`EndpointAnalyzer`)**: Evaluates API route and endpoint mutations (`ctx.endpoint_impacts`).
-5. **Blast Radius Analysis (`BlastRadiusAnalyzer`)**: Aggregates entity and endpoint impacts to build `ctx.blast_radius`.
-6. **Report Generation (`ReportBuilder`)**: Assembles all findings into an `ImpactAnalysisReport` containing:
-   - **Feature Summary**: Clear business goals.
-   - **Component Blast Radius**: Impacted system components.
-   - **Data Model Impact**: Database schema updates.
-   - **API mutations**: Endpoint schema changes.
-   - **Clarification questions**: Outstanding product and design questions.
-   - **Test Scenarios**: Structured happy path, negative, and edge test cases.
-   - **BDD Scenarios**: Given/When/Then scenarios.
+| # | Step | Module | Responsibility |
+|---|------|--------|----------------|
+| 1 | **LLM Requirement Planner** | `llm/analyzers/llm_requirement_planner.py` | Uses an LLM (Ollama) to determine which engineering context types are needed. Falls back to rule-based `RequirementAnalyzer` on failure. |
+| 2 | **Context Retriever** | `retrievers/context_retriever.py` | Queries the running FastAPI app via `context_client.py` to fetch entities, endpoints, models, OpenAPI spec, business logic, repositories, integrations, components, and documentation — driven by the `ContextPlan`. |
+| 3 | **Entity Analyzer** | `analyzers/entity_analyzer.py` | Evaluates database schema impacts (`ctx.entity_impacts`). |
+| 4 | **Endpoint Analyzer** | `analyzers/endpoint_analyzer.py` | Evaluates API route and endpoint mutations (`ctx.endpoint_impacts`). |
+| 5 | **Model Analyzer** | `analyzers/model_analyzer.py` | Evaluates Pydantic request/response model impacts (`ctx.model_impacts`). |
+| 6 | **OpenAPI Analyzer** | `analyzers/openapi_analyzer.py` | Cross-references the OpenAPI spec against keywords to find additional contract-level impacts. De-duplicates against existing endpoint impacts. |
+| 7 | **Business Logic Analyzer** | `analyzers/business_logic_analyzer.py` | Identifies impacted business rules, services, and workflows (`ctx.business_logic_impacts`). |
+| 8 | **Repository Analyzer** | `analyzers/repository_analyzer.py` | Identifies impacted data-access and repository layer components (`ctx.repository_impacts`). |
+| 9 | **Integration Analyzer** | `analyzers/integration_analyzer.py` | Identifies impacted external integrations and third-party services (`ctx.integration_impacts`). |
+| 10 | **Component Impact Analyzer** | `analyzers/component_impact_analyzer.py` | Identifies generic architectural component impacts (`ctx.component_impacts`). |
+| 11 | **Blast Radius Analyzer** | `analyzers/blast_radius.py` | Aggregates all layer-specific impacts into a unified, deduplicated blast radius with severity levels. |
+| 12 | **Report Builder** | `builders/report_builder.py` | Assembles all findings into an `ImpactAnalysisReport`. |
 
-#### Running the Impact Agent:
+#### LLM Integration
 
-Ensure the FastAPI service is running locally on port 8000, then execute:
+The agent uses a **pluggable LLM provider architecture**:
+
+```
+app/agent/llm/
+├── client.py                # LLMClient — entry point for LLM calls
+├── constants.py             # Default model (llama3.2:3b) and provider (ollama)
+├── json_parser.py           # LLMJsonParser — raw JSON extraction
+├── structured_output.py     # StructuredOutputParser — JSON extraction + Pydantic validation
+├── analyzers/
+│   └── llm_requirement_planner.py   # LLM-based planning step (with rule-based fallback)
+├── prompts/
+│   └── planner_prompt.py    # Detailed prompt engineering for the planner
+└── providers/
+    ├── base_provider.py     # BaseLLMProvider — abstract interface
+    └── ollama_provider.py   # OllamaProvider — Ollama REST API integration
+```
+
+**Key design decisions:**
+
+- **LLM-first, rule-based fallback**: The `LLMRequirementPlanner` calls the LLM to produce a `ContextPlan`. If the LLM is unavailable, returns malformed JSON, or fails Pydantic validation, the system automatically falls back to the deterministic `RequirementAnalyzer`.
+- **Structured output parsing**: `StructuredOutputParser` strips markdown code fences, extracts JSON, unwraps common LLM response wrappers (`result`, `data`, `response`, `output`), and validates against the target Pydantic model.
+- **Traceability**: Every LLM interaction (prompt, response, provider, model, duration) is recorded in `ctx.llm_interactions` for debugging and analysis.
+- **Provider abstraction**: New LLM providers can be added by implementing `BaseLLMProvider` and injecting them into `LLMClient`.
+
+#### Report Contents
+
+The final `ImpactAnalysisReport` includes:
+
+- **Feature Summary**: Clear business goals.
+- **Component Blast Radius**: Impacted system layers with severity (Low / Medium / High).
+- **Data Model Impact**: Database schema updates.
+- **API Mutations**: Endpoint schema and contract changes.
+- **Model Impacts**: Pydantic request/response model changes.
+- **Business Logic Impacts**: Affected services, rules, and workflows.
+- **Repository Impacts**: Data-access layer changes.
+- **Integration Impacts**: External service and third-party changes.
+- **Component Impacts**: Generic architectural component changes.
+- **Clarification Questions**: Outstanding product and design questions.
+- **Test Scenarios**: Structured happy path, negative, and edge test cases.
+- **BDD Scenarios**: Given/When/Then scenarios.
+
+#### Pipeline Executor
+
+`PipelineExecutor` provides lifecycle hooks and execution metrics:
+
+- **Lifecycle hooks**: `before_pipeline`, `before_step`, `after_step`, `on_error`, `after_pipeline`
+- **Metrics**: Per-step timing (`ctx.execution_metrics`) and total pipeline duration
+- **Result**: `PipelineResult` with success status, executed steps, metrics, and the final report
+
+#### Running the Impact Agent
+
+**Prerequisites:**
+1. The FastAPI service must be running on port 8000.
+2. Ollama must be running locally on port 11434 with the `llama3.2:3b` model pulled.
+
+```bash
+# Pull the model (first time only)
+ollama pull llama3.2:3b
+```
 
 **On PowerShell (Windows):**
 ```powershell
@@ -159,6 +221,68 @@ python app/agent/impact_agent.py
 **On Bash (Linux/macOS):**
 ```bash
 PYTHONPATH=app/agent python app/agent/impact_agent.py
+```
+
+> **Note**: If Ollama is unavailable, the agent automatically falls back to the rule-based `RequirementAnalyzer` and the pipeline continues without interruption.
+
+---
+
+## Project Structure
+
+```
+inventory-management-service/
+├── app/
+│   ├── main.py                         # FastAPI application entry point
+│   ├── agent/                          # Impact Analysis Agent
+│   │   ├── impact_agent.py             # ImpactAgent orchestrator
+│   │   ├── models.py                   # Pydantic domain models (Requirement, AnalysisContext, Reports, etc.)
+│   │   ├── context_client.py           # HTTP client for Engineering Context APIs
+│   │   ├── core/
+│   │   │   ├── agent_step.py           # AgentStep — abstract base class for pipeline steps
+│   │   │   ├── pipeline_executor.py    # PipelineExecutor — lifecycle, metrics, error handling
+│   │   │   └── logger.py              # Agent-specific logger
+│   │   ├── analyzers/
+│   │   │   ├── requirement_analyzer.py # Rule-based requirement analysis (fallback planner)
+│   │   │   ├── entity_analyzer.py      # Database schema impact analysis
+│   │   │   ├── endpoint_analyzer.py    # API endpoint impact analysis
+│   │   │   ├── model_analyzer.py       # Pydantic model impact analysis
+│   │   │   ├── openapi_analyzer.py     # OpenAPI contract analysis
+│   │   │   ├── business_logic_analyzer.py  # Business rule impact analysis
+│   │   │   ├── repository_analyzer.py  # Data-access layer impact analysis
+│   │   │   ├── integration_analyzer.py # External integration impact analysis
+│   │   │   ├── component_impact_analyzer.py # Generic component impact analysis
+│   │   │   └── blast_radius.py         # Blast radius aggregation & deduplication
+│   │   ├── builders/
+│   │   │   ├── report_builder.py       # Final report assembly
+│   │   │   ├── feature_summary_builder.py
+│   │   │   ├── clarification_builder.py
+│   │   │   ├── test_scenario_builder.py
+│   │   │   └── bdd_builder.py
+│   │   ├── retrievers/
+│   │   │   └── context_retriever.py    # Plan-driven engineering context retrieval
+│   │   └── llm/
+│   │       ├── client.py               # LLMClient — unified LLM interface
+│   │       ├── constants.py            # Model & provider defaults
+│   │       ├── json_parser.py          # Raw JSON extraction from LLM responses
+│   │       ├── structured_output.py    # JSON extraction + Pydantic validation
+│   │       ├── analyzers/
+│   │       │   └── llm_requirement_planner.py  # LLM-based context planner
+│   │       ├── prompts/
+│   │       │   └── planner_prompt.py   # Prompt engineering for the planner
+│   │       └── providers/
+│   │           ├── base_provider.py    # BaseLLMProvider — abstract interface
+│   │           └── ollama_provider.py  # Ollama REST API provider
+│   ├── category/                       # Category domain (models, routes, service)
+│   ├── product/                        # Product domain (models, routes, service)
+│   ├── sku/                            # SKU domain (models, routes, service)
+│   ├── engineering/                    # Engineering Context discovery APIs
+│   ├── core/                           # Shared core (database, config, logger)
+│   └── middleware/                     # Correlation ID middleware
+├── tests/                              # Unit tests
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+└── README.md
 ```
 
 ---
@@ -183,3 +307,5 @@ venv\Scripts\pytest
 - The app initializes the database schema on startup.
 - The product search endpoint depends on Elasticsearch being available.
 - Docker Compose includes `db` and `elasticsearch` services and mounts the project into the container for local development.
+- The Impact Agent requires the FastAPI service to be running for engineering context retrieval.
+- LLM integration is optional — the agent degrades gracefully to rule-based analysis when Ollama is unavailable.

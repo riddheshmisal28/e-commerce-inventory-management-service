@@ -46,6 +46,9 @@ from app.agent.core.pipeline_executor import (
 from app.agent.analyzers.openapi_analyzer import (
     OpenAPIAnalyzer,
 )
+from app.agent.analyzers.component_impact_analyzer import (
+    ComponentImpactAnalyzer,
+)
 
 class ImpactAgent:
 
@@ -62,6 +65,7 @@ class ImpactAgent:
             BusinessLogicAnalyzer(),
             RepositoryAnalyzer(),
             IntegrationAnalyzer(),
+            ComponentImpactAnalyzer(),
             BlastRadiusAnalyzer(),
             ReportBuilder(),
         ]
