@@ -12,7 +12,7 @@ A FastAPI-based inventory management service with PostgreSQL persistence, Elasti
 - **Correlation ID Middleware**: Structured logging and tracing across services.
 - **Model Context Protocol (MCP)**: Dynamic exposure of application tools and schemas to LLMs.
 - **Engineering Context API**: Special metadata endpoints to inspect database tables, models, and routes.
-- **Agentic Impact Analysis**: A 12-step pipeline engine — with LLM-powered planning and rule-based fallback — that processes requirement documents and produces comprehensive impact reports (blast radius, contract mutations, data schemas, BDD test scenarios).
+- **Agentic Impact Analysis**: A 6-step pipeline engine — with LLM-powered reasoning, grounding validation, and rule-based fallback — that processes requirement documents and produces comprehensive impact reports (blast radius, contract mutations, data schemas, BDD test scenarios).
 
 ## Tech Stack
 
@@ -34,7 +34,7 @@ A FastAPI-based inventory management service with PostgreSQL persistence, Elasti
 - Python 3.11
 - Docker
 - Docker Compose
-- [Ollama](https://ollama.com/) (for LLM-powered requirement planning)
+- [Ollama](https://ollama.com/) (for LLM-powered requirement planning and impact reasoning)
 
 ### Install Dependencies
 
@@ -133,22 +133,34 @@ Located in the `app/agent` directory, this is a modular, object-oriented pipelin
 
 #### Pipeline Architecture & Flow
 
-The `ImpactAgent` orchestrates a **12-step pipeline** via `PipelineExecutor`. Each step implements the `AgentStep` interface, receives a shared `AnalysisContext`, and updates it in place:
+The `ImpactAgent` orchestrates a **6-step pipeline** via `PipelineExecutor`. Each step implements the `AgentStep` interface, receives a shared `AnalysisContext`, and updates it in place:
 
 | # | Step | Module | Responsibility |
 |---|------|--------|----------------|
 | 1 | **LLM Requirement Planner** | `llm/analyzers/llm_requirement_planner.py` | Uses an LLM (Ollama) to determine which engineering context types are needed. Falls back to rule-based `RequirementAnalyzer` on failure. |
 | 2 | **Context Retriever** | `retrievers/context_retriever.py` | Queries the running FastAPI app via `context_client.py` to fetch entities, endpoints, models, OpenAPI spec, business logic, repositories, integrations, components, and documentation — driven by the `ContextPlan`. |
-| 3 | **Entity Analyzer** | `analyzers/entity_analyzer.py` | Evaluates database schema impacts (`ctx.entity_impacts`). |
-| 4 | **Endpoint Analyzer** | `analyzers/endpoint_analyzer.py` | Evaluates API route and endpoint mutations (`ctx.endpoint_impacts`). |
-| 5 | **Model Analyzer** | `analyzers/model_analyzer.py` | Evaluates Pydantic request/response model impacts (`ctx.model_impacts`). |
-| 6 | **OpenAPI Analyzer** | `analyzers/openapi_analyzer.py` | Cross-references the OpenAPI spec against keywords to find additional contract-level impacts. De-duplicates against existing endpoint impacts. |
-| 7 | **Business Logic Analyzer** | `analyzers/business_logic_analyzer.py` | Identifies impacted business rules, services, and workflows (`ctx.business_logic_impacts`). |
-| 8 | **Repository Analyzer** | `analyzers/repository_analyzer.py` | Identifies impacted data-access and repository layer components (`ctx.repository_impacts`). |
-| 9 | **Integration Analyzer** | `analyzers/integration_analyzer.py` | Identifies impacted external integrations and third-party services (`ctx.integration_impacts`). |
-| 10 | **Component Impact Analyzer** | `analyzers/component_impact_analyzer.py` | Identifies generic architectural component impacts (`ctx.component_impacts`). |
-| 11 | **Blast Radius Analyzer** | `analyzers/blast_radius.py` | Aggregates all layer-specific impacts into a unified, deduplicated blast radius with severity levels. |
-| 12 | **Report Builder** | `builders/report_builder.py` | Assembles all findings into an `ImpactAnalysisReport`. |
+| 3 | **Impact Reasoner** | `reasoning/impact_reasoner.py` | Sends the full engineering context and requirement to the LLM and receives a structured `ImpactReasoningResult` covering all impact categories (entities, endpoints, models, business logic, repositories, integrations, components) in a single grounded LLM call. |
+| 4 | **Impact Validator** | `validators/impact_validator.py` | Cross-references each LLM-produced impact against the real engineering context. Filters out hallucinated entities, non-existent endpoints, invalid field operations, and fabricated components. |
+| 5 | **Blast Radius Analyzer** | `analyzers/blast_radius.py` | Aggregates all validated, layer-specific impacts into a unified, deduplicated blast radius with severity levels. |
+| 6 | **Report Builder** | `builders/report_builder.py` | Assembles all findings into an `ImpactAnalysisReport`. |
+
+#### Impact Reasoner
+
+`ImpactReasoner` (`reasoning/impact_reasoner.py`) is the core LLM analysis step. It:
+
+- Constructs a detailed prompt containing the full requirement (title, description, acceptance criteria) and the complete engineering context (entities with columns, endpoints, Pydantic models, OpenAPI spec, business logic, repositories, integrations, and application components).
+- Enforces **strict grounding rules** in the prompt: the LLM must only reference artifacts that exist in the supplied context and must never invent entities, fields, endpoints, or components.
+- Parses the LLM response into an `ImpactReasoningResult` (via `StructuredOutputParser`) and writes all impact categories directly into the shared `AnalysisContext`.
+- Records the full LLM interaction (prompt, response, provider, model, duration) in `ctx.llm_interactions`.
+
+#### Impact Validator
+
+`ImpactValidator` (`validators/impact_validator.py`) is a post-LLM grounding step that ensures result quality:
+
+- **Entity validation**: Checks that each reported entity exists in the retrieved context. For `ADD_FIELD`, verifies the field does not already exist. For `REMOVE_FIELD`, verifies the field exists and that the requirement does not actually depend on it (using `FIELD_ALIASES` for semantic matching). For `MODIFY_FIELD`, verifies the field exists.
+- **Endpoint validation**: Filters out any endpoint impacts referencing paths not present in the retrieved endpoint context.
+- **Model validation**: Filters out any Pydantic model impacts referencing models not present in the retrieved model context.
+- **Component validation**: Validates business logic, repository, integration, and generic component impacts against their respective retrieved context lists.
 
 #### LLM Integration
 
@@ -172,9 +184,24 @@ app/agent/llm/
 **Key design decisions:**
 
 - **LLM-first, rule-based fallback**: The `LLMRequirementPlanner` calls the LLM to produce a `ContextPlan`. If the LLM is unavailable, returns malformed JSON, or fails Pydantic validation, the system automatically falls back to the deterministic `RequirementAnalyzer`.
+- **Single-call LLM reasoning**: `ImpactReasoner` consolidates all impact categories into a single LLM call with a richly structured prompt, replacing the previous per-concern analyzer chain. This reduces latency and gives the LLM holistic context.
+- **Post-LLM validation**: `ImpactValidator` acts as a grounding filter after the LLM step, removing any hallucinated or contextually invalid impacts before they propagate to the blast radius or report.
 - **Structured output parsing**: `StructuredOutputParser` strips markdown code fences, extracts JSON, unwraps common LLM response wrappers (`result`, `data`, `response`, `output`), and validates against the target Pydantic model.
 - **Traceability**: Every LLM interaction (prompt, response, provider, model, duration) is recorded in `ctx.llm_interactions` for debugging and analysis.
 - **Provider abstraction**: New LLM providers can be added by implementing `BaseLLMProvider` and injecting them into `LLMClient`.
+
+#### Key Models
+
+| Model | Purpose |
+|-------|---------|
+| `Requirement` | Input: title, description, acceptance criteria |
+| `ContextPlan` | LLM planner output: which context types to retrieve |
+| `EngineeringContext` | Holds all retrieved context (entities, endpoints, models, etc.) |
+| `ImpactReasoningResult` | Structured LLM output from `ImpactReasoner`: all impact categories |
+| `AnalysisContext` | Shared pipeline state passed between all steps |
+| `ImpactAnalysisReport` | Final output report |
+| `PipelineResult` | Pipeline execution result: success, metrics, report, error |
+| `LLMInteraction` | Recorded LLM call: step, provider, model, prompt, response, duration |
 
 #### Report Contents
 
@@ -234,23 +261,27 @@ inventory-management-service/
 ├── app/
 │   ├── main.py                         # FastAPI application entry point
 │   ├── agent/                          # Impact Analysis Agent
-│   │   ├── impact_agent.py             # ImpactAgent orchestrator
-│   │   ├── models.py                   # Pydantic domain models (Requirement, AnalysisContext, Reports, etc.)
+│   │   ├── impact_agent.py             # ImpactAgent orchestrator (6-step pipeline)
+│   │   ├── models.py                   # Pydantic domain models (Requirement, AnalysisContext, ImpactReasoningResult, Reports, etc.)
 │   │   ├── context_client.py           # HTTP client for Engineering Context APIs
 │   │   ├── core/
 │   │   │   ├── agent_step.py           # AgentStep — abstract base class for pipeline steps
 │   │   │   ├── pipeline_executor.py    # PipelineExecutor — lifecycle, metrics, error handling
 │   │   │   └── logger.py              # Agent-specific logger
+│   │   ├── reasoning/
+│   │   │   └── impact_reasoner.py      # ImpactReasoner — single LLM call for all impact categories
+│   │   ├── validators/
+│   │   │   └── impact_validator.py     # ImpactValidator — post-LLM grounding & hallucination filter
 │   │   ├── analyzers/
 │   │   │   ├── requirement_analyzer.py # Rule-based requirement analysis (fallback planner)
-│   │   │   ├── entity_analyzer.py      # Database schema impact analysis
-│   │   │   ├── endpoint_analyzer.py    # API endpoint impact analysis
-│   │   │   ├── model_analyzer.py       # Pydantic model impact analysis
-│   │   │   ├── openapi_analyzer.py     # OpenAPI contract analysis
-│   │   │   ├── business_logic_analyzer.py  # Business rule impact analysis
-│   │   │   ├── repository_analyzer.py  # Data-access layer impact analysis
-│   │   │   ├── integration_analyzer.py # External integration impact analysis
-│   │   │   ├── component_impact_analyzer.py # Generic component impact analysis
+│   │   │   ├── entity_analyzer.py      # Rule-based database schema impact (fallback)
+│   │   │   ├── endpoint_analyzer.py    # Rule-based API endpoint impact (fallback)
+│   │   │   ├── model_analyzer.py       # Rule-based Pydantic model impact (fallback)
+│   │   │   ├── openapi_analyzer.py     # OpenAPI contract analysis (fallback)
+│   │   │   ├── business_logic_analyzer.py  # Rule-based business rule impact (fallback)
+│   │   │   ├── repository_analyzer.py  # Rule-based data-access layer impact (fallback)
+│   │   │   ├── integration_analyzer.py # Rule-based external integration impact (fallback)
+│   │   │   ├── component_impact_analyzer.py # Rule-based component impact (fallback)
 │   │   │   └── blast_radius.py         # Blast radius aggregation & deduplication
 │   │   ├── builders/
 │   │   │   ├── report_builder.py       # Final report assembly
@@ -309,3 +340,4 @@ venv\Scripts\pytest
 - Docker Compose includes `db` and `elasticsearch` services and mounts the project into the container for local development.
 - The Impact Agent requires the FastAPI service to be running for engineering context retrieval.
 - LLM integration is optional — the agent degrades gracefully to rule-based analysis when Ollama is unavailable.
+- `ImpactReasoner` and `ImpactValidator` work in tandem: the reasoner produces LLM-grounded impacts; the validator ensures they reference real artifacts from the engineering context before they reach the report.
