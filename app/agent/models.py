@@ -22,24 +22,48 @@ class DataModelImpact(BaseModel):
     change_type: str
     change: str
     reason: str | None = None
+    relevance_score: float | None = None
+    confidence: float | None = None
+    relevance: str | None = None
+    evidence: list[str] = Field(
+        default_factory=list,
+    )
 
 class ApiMutation(BaseModel):
     endpoint: str
     change_type: str
     details: str
     reason: str | None = None
+    relevance_score: float | None = None
+    confidence: float | None = None
+    relevance: str | None = None
+    evidence: list[str] = Field(
+        default_factory=list,
+    )
 
 class ModelImpact(BaseModel):
     model: str
     change_type: str
     change: str
     reason: str | None = None
+    relevance_score: float | None = None
+    confidence: float | None = None
+    relevance: str | None = None
+    evidence: list[str] = Field(
+        default_factory=list,
+    )
 
 class ComponentImpact(BaseModel):
     component: str
     impact_type: str
     change: str
     reason: str | None = None
+    relevance_score: float | None = None
+    confidence: float | None = None
+    relevance: str | None = None
+    evidence: list[str] = Field(
+        default_factory=list,
+    )
 
 class LLMImpactAnalysis(BaseModel):
     model_impacts: list[ModelImpact] = Field(
@@ -185,10 +209,11 @@ class AnalysisContext(BaseModel):
     execution_metrics: dict[str, float] = Field(
         default_factory=dict,
     )
-    llm_interactions: list[LLMInteraction] = Field(
+    llm_interactions: list["LLMInteraction"] = Field(
         default_factory=list,
     )
-    pipeline_result: PipelineResult | None = None
+    pipeline_result: "PipelineResult | None" = None
+
     @property
     def requirement_text(self) -> str:
         return f"""
@@ -248,5 +273,23 @@ class ImpactReasoningResult(BaseModel):
         default_factory=list,
     )
     component_impacts: list[ComponentImpact] = Field(
+        default_factory=list,
+    )
+
+class SemanticImpactDecision(BaseModel):
+    category: str
+    artifact: str
+    change_type: str
+    keep: bool
+    relevance_score: float
+    confidence: float
+    relevance: str
+    reason: str
+    evidence: list[str] = Field(
+        default_factory=list,
+    )
+
+class SemanticImpactRefinementResult(BaseModel):
+    decisions: list[SemanticImpactDecision] = Field(
         default_factory=list,
     )

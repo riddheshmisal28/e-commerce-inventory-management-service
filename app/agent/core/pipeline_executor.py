@@ -57,7 +57,7 @@ class PipelineExecutor:
 
                 ctx.execution_metrics[
                     step.name
-                ] = elapsed
+                ] = elapsed * 1000
 
                 self.after_step(
                     step,
@@ -65,12 +65,16 @@ class PipelineExecutor:
                     elapsed,
                 )
 
-            except Exception:
+            except Exception as exc:
 
                 elapsed = (
                     time.perf_counter()
                     - start
                 )
+
+                ctx.execution_metrics[
+                    step.name
+                ] = elapsed * 1000
 
                 self.on_error(
                     step,
@@ -78,7 +82,29 @@ class PipelineExecutor:
                     elapsed,
                 )
 
-                raise
+                total_elapsed = (
+                    time.perf_counter()
+                    - total_start
+                )
+
+                result = PipelineResult(
+                    success=False,
+                    total_duration_ms=(
+                        total_elapsed * 1000
+                    ),
+                    executed_steps=(
+                        ctx.execution_history.copy()
+                    ),
+                    execution_metrics=(
+                        ctx.execution_metrics.copy()
+                    ),
+                    report=ctx.report,
+                    error=str(exc),
+                )
+
+                ctx.pipeline_result = result
+
+                return result
 
         self.after_pipeline(ctx)
 

@@ -74,6 +74,17 @@ caused by the requirement.
 You MUST reason only from the requirement and the
 engineering context provided below.
 
+Every reported impact must have a direct and defensible
+relationship to the requirement.
+
+Do not report an artifact merely because:
+
+- its name is lexically similar to the requirement
+- it exists in the engineering context
+- it could theoretically be involved
+- it is commonly used for similar features
+- it might be useful in a future implementation
+
 Do not invent engineering artifacts.
 
 Do not invent entities.
@@ -94,6 +105,11 @@ Do not invent application components.
 
 Every reported artifact MUST exist in the corresponding
 engineering context.
+
+Prefer fewer accurate impacts over many speculative impacts.
+
+If there is insufficient evidence for an impact,
+return an empty list for that category.
 
 Return exactly one JSON object.
 
@@ -128,7 +144,10 @@ Each item:
     "entity": "exact existing entity name",
     "change_type": "ADD_FIELD | MODIFY_FIELD | REMOVE_FIELD | BUSINESS_RULE | RELATIONSHIP | CONSTRAINT",
     "change": "specific technical change",
-    "reason": "why the entity is affected"
+    "reason": "why the entity is affected",
+    "evidence": [
+        "specific engineering-context evidence supporting the impact"
+    ]
 }}
 
 CHANGE TYPE RULES:
@@ -181,7 +200,10 @@ Correct:
     "entity": "skus",
     "change_type": "BUSINESS_RULE",
     "change": "Use quantity when evaluating low stock conditions.",
-    "reason": "The requirement depends on the existing quantity field."
+    "reason": "The requirement depends on the existing quantity field.",
+    "evidence": [
+        "The skus entity contains the quantity field."
+    ]
 }}
 
 Incorrect:
@@ -191,6 +213,14 @@ Incorrect:
     "change_type": "REMOVE_FIELD",
     "change": "quantity"
 }}
+
+Do not report unrelated fields merely because they belong
+to the same entity.
+
+For example, if the requirement concerns stock quantity,
+do not report fields such as description, category, title,
+or metadata unless the engineering context explicitly
+connects them to the requirement.
 
 ==========================================================
 API INTERFACE MUTATIONS
@@ -206,11 +236,17 @@ Each item:
     "endpoint": "exact endpoint from context",
     "change_type": "ADD_ENDPOINT | MODIFY_ENDPOINT | REMOVE_ENDPOINT",
     "details": "specific API change",
-    "reason": "why the endpoint is affected"
+    "reason": "why the endpoint is affected",
+    "evidence": [
+        "specific engineering-context evidence supporting the impact"
+    ]
 }}
 
 Do not create API impacts merely because the feature
 contains business logic.
+
+Do not report an endpoint only because its name contains
+a keyword from the requirement.
 
 ==========================================================
 MODEL IMPACTS
@@ -225,10 +261,16 @@ Each item:
     "model": "exact existing model name",
     "change_type": "ADD_FIELD | MODIFY_FIELD | REMOVE_FIELD | VALIDATION",
     "change": "specific model change",
-    "reason": "why the model is affected"
+    "reason": "why the model is affected",
+    "evidence": [
+        "specific engineering-context evidence supporting the impact"
+    ]
 }}
 
 Only use model names present in the supplied model context.
+
+Do not report a model merely because it contains a field
+with a similar name to a requirement concept.
 
 ==========================================================
 BUSINESS LOGIC IMPACTS
@@ -243,10 +285,11 @@ Each item:
     "component": "exact existing business logic component",
     "impact_type": "ADD_RULE | MODIFY_RULE | VALIDATION | WORKFLOW | CALCULATION | STATE_TRANSITION",
     "change": "specific behavioral change",
-    "reason": "why the component is affected"
+    "reason": "why the component is affected",
+    "evidence": [
+        "specific engineering-context evidence supporting the impact"
+    ]
 }}
-
-IMPORTANT:
 
 The component MUST exactly match a component present
 in the Business Logic context.
@@ -276,10 +319,19 @@ Each item:
     "component": "exact existing repository",
     "impact_type": "QUERY | CREATE | UPDATE | DELETE | FILTER | TRANSACTION",
     "change": "specific repository change",
-    "reason": "why the repository is affected"
+    "reason": "why the repository is affected",
+    "evidence": [
+        "specific engineering-context evidence supporting the impact"
+    ]
 }}
 
 The repository MUST exist in the supplied context.
+
+Do not report a repository merely because the feature
+uses persisted data.
+
+There must be evidence that the repository participates
+in the affected data flow.
 
 ==========================================================
 INTEGRATION IMPACTS
@@ -294,7 +346,10 @@ Each item:
     "component": "exact existing integration",
     "impact_type": "ADD_INTEGRATION | MODIFY_INTEGRATION | NOTIFICATION | EVENT | API_CALL",
     "change": "specific integration change",
-    "reason": "why the integration is affected"
+    "reason": "why the integration is affected",
+    "evidence": [
+        "specific engineering-context evidence supporting the impact"
+    ]
 }}
 
 Do not invent an email provider, SMS provider,
@@ -319,10 +374,42 @@ Each item:
     "component": "exact existing component",
     "impact_type": "ADD_COMPONENT | MODIFY_COMPONENT | CONFIGURATION | SCHEDULER | WORKER | QUEUE",
     "change": "specific required change",
-    "reason": "why the component is affected"
+    "reason": "why the component is affected",
+    "evidence": [
+        "specific engineering-context evidence supporting the impact"
+    ]
 }}
 
 The component MUST exist in the supplied context.
+
+==========================================================
+EVIDENCE RULES
+==========================================================
+
+Every impact must provide evidence.
+
+Evidence must come from the supplied engineering context.
+
+Good evidence:
+
+- An existing entity contains the affected field.
+- An existing service explicitly uses the affected entity.
+- An existing repository accesses the affected entity.
+- An existing endpoint exposes the affected model.
+- An existing integration is already responsible for the
+  required external behavior.
+- An existing component explicitly participates in the
+  affected workflow.
+
+Bad evidence:
+
+- "This would probably be used."
+- "This is commonly used for this feature."
+- "The component name sounds related."
+- "The requirement mentions a similar word."
+- "This could be implemented here."
+
+Do not create an impact without concrete evidence.
 
 ==========================================================
 GROUNDING RULES
@@ -364,9 +451,21 @@ GROUNDING RULES
 13. Every impact must have a clear relationship to the
     requirement.
 
-14. Do not determine blast radius.
+14. The existence of an artifact is NOT sufficient evidence
+    that the artifact is impacted.
 
-15. Do not assign severity.
+15. A shared entity does NOT mean every field of that entity
+    is impacted.
+
+16. Do not infer impact from keyword overlap alone.
+
+17. Do not determine blast radius.
+
+18. Do not assign severity.
+
+19. Do not assign relevance_score.
+
+20. Do not assign confidence.
 
 ==========================================================
 REQUIREMENT
@@ -463,7 +562,7 @@ DOCUMENTATION
 )}
 
 ==========================================================
-FINAL INSTRUCTIONS
+FINAL VERIFICATION
 ==========================================================
 
 Before producing each impact, verify:
@@ -474,9 +573,16 @@ Before producing each impact, verify:
 
 3. Is the impact directly supported by the requirement?
 
-4. Is the selected change_type appropriate?
+4. Is there concrete engineering evidence?
 
-5. Am I inventing anything?
+5. Is the selected change_type appropriate?
+
+6. Is the impact more than simple keyword similarity?
+
+7. Am I inventing anything?
+
+8. Could this impact be removed without losing a
+   requirement-driven engineering change?
 
 If any answer is NO, do not report the impact.
 
@@ -583,13 +689,9 @@ Return ONLY the JSON object.
         for item in items:
 
             if isinstance(item, dict):
-
                 formatted.append(
-                    self._format_dict(
-                        item,
-                    )
+                    self._format_dict(item)
                 )
-
             else:
                 formatted.append(
                     str(item)

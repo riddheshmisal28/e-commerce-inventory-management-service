@@ -31,6 +31,9 @@ from app.agent.reasoning.impact_reasoner import (
 from app.agent.validators.impact_validator import (
     ImpactValidator,
 )
+from app.agent.steps.semantic_impact_refiner import (
+    SemanticImpactRefiner,
+)
 
 class ImpactAgent:
 
@@ -42,6 +45,7 @@ class ImpactAgent:
             ContextRetriever(),
             ImpactReasoner(),
             ImpactValidator(),
+            SemanticImpactRefiner(),
             BlastRadiusAnalyzer(),
             ReportBuilder(),
         ]

@@ -27,7 +27,6 @@ class BlastRadiusAnalyzer(AgentStep):
                 "Database entities or their schema may require "
                 "changes to support the requirement."
             ),
-            severity="Medium",
         )
 
         self._add_layer_impact(
@@ -38,7 +37,6 @@ class BlastRadiusAnalyzer(AgentStep):
                 "Existing or new API endpoints may require "
                 "request, response, or behavioral changes."
             ),
-            severity="Medium",
         )
 
         self._add_layer_impact(
@@ -49,7 +47,6 @@ class BlastRadiusAnalyzer(AgentStep):
                 "Pydantic request or response models may require "
                 "schema or validation changes."
             ),
-            severity="Medium",
         )
 
         self._add_layer_impact(
@@ -60,7 +57,6 @@ class BlastRadiusAnalyzer(AgentStep):
                 "Business rules, application services, workflows, "
                 "or validations may require changes."
             ),
-            severity="High",
         )
 
         self._add_layer_impact(
@@ -71,7 +67,6 @@ class BlastRadiusAnalyzer(AgentStep):
                 "Database queries, repository methods, CRUD operations, "
                 "or data-access logic may change."
             ),
-            severity="Medium",
         )
 
         self._add_layer_impact(
@@ -82,7 +77,6 @@ class BlastRadiusAnalyzer(AgentStep):
                 "External services or third-party integrations "
                 "may be required or modified."
             ),
-            severity="High",
         )
 
         self._add_component_impact(
@@ -100,20 +94,34 @@ class BlastRadiusAnalyzer(AgentStep):
         blast_radius: list[BlastRadius],
         component: str,
         default_reason: str,
-        severity: str,
     ) -> None:
 
         if not impacts:
             return
 
+        relevant_impacts = [
+            impact
+            for impact in impacts
+            if self._is_relevant(
+                impact,
+            )
+        ]
+
+        if not relevant_impacts:
+            return
+
         reasons = self._extract_reasons(
-            impacts,
+            relevant_impacts,
         )
 
         reason = default_reason
 
         if reasons:
             reason = " ".join(reasons)
+
+        severity = self._determine_layer_severity(
+            relevant_impacts,
+        )
 
         blast_radius.append(
             BlastRadius(
@@ -134,6 +142,11 @@ class BlastRadiusAnalyzer(AgentStep):
             if not impact.component:
                 continue
 
+            if not self._is_relevant(
+                impact,
+            ):
+                continue
+
             blast_radius.append(
                 BlastRadius(
                     component=impact.component,
@@ -141,39 +154,107 @@ class BlastRadiusAnalyzer(AgentStep):
                         impact.reason
                         or impact.change
                     ),
-                    severity=self._determine_component_severity(
-                        impact.impact_type,
+                    severity=(
+                        self._determine_component_severity(
+                            impact,
+                        )
                     ),
                 )
             )
 
-    def _extract_reasons(
+    def _is_relevant(
+        self,
+        impact,
+    ) -> bool:
+
+        relevance_score = getattr(
+            impact,
+            "relevance_score",
+            1.0,
+        )
+
+        confidence = getattr(
+            impact,
+            "confidence",
+            1.0,
+        )
+
+        return (
+            relevance_score >= 0.50
+            and confidence >= 0.50
+        )
+
+    def _determine_layer_severity(
         self,
         impacts: list,
-    ) -> list[str]:
+    ) -> str:
 
-        reasons: list[str] = []
+        highest_relevance = max(
+            (
+                getattr(
+                    impact,
+                    "relevance_score",
+                    1.0,
+                )
+                for impact in impacts
+            ),
+            default=0.0,
+        )
 
-        for impact in impacts:
+        highest_confidence = max(
+            (
+                getattr(
+                    impact,
+                    "confidence",
+                    1.0,
+                )
+                for impact in impacts
+            ),
+            default=0.0,
+        )
 
-            reason = getattr(
-                impact,
-                "reason",
-                None,
-            )
+        if (
+            highest_relevance >= 0.90
+            and highest_confidence >= 0.90
+        ):
+            return "High"
 
-            if reason and reason not in reasons:
-                reasons.append(reason)
+        if (
+            highest_relevance >= 0.75
+            and highest_confidence >= 0.75
+        ):
+            return "Medium"
 
-        return reasons
+        return "Low"
 
     def _determine_component_severity(
         self,
-        impact_type: str | None,
+        impact,
     ) -> str:
 
-        if not impact_type:
-            return "Medium"
+        impact_type = getattr(
+            impact,
+            "impact_type",
+            "",
+        )
+
+        relevance_score = getattr(
+            impact,
+            "relevance_score",
+            1.0,
+        )
+
+        confidence = getattr(
+            impact,
+            "confidence",
+            1.0,
+        )
+
+        if (
+            relevance_score >= 0.90
+            and confidence >= 0.90
+        ):
+            return "High"
 
         impact_type = impact_type.lower()
 
@@ -193,11 +274,43 @@ class BlastRadiusAnalyzer(AgentStep):
                 "business",
                 "logic",
                 "workflow",
+                "state_transition",
             )
         ):
             return "High"
 
-        return "Medium"
+        if (
+            relevance_score >= 0.75
+            and confidence >= 0.75
+        ):
+            return "Medium"
+
+        return "Low"
+
+    def _extract_reasons(
+        self,
+        impacts: list,
+    ) -> list[str]:
+
+        reasons: list[str] = []
+
+        for impact in impacts:
+
+            reason = getattr(
+                impact,
+                "reason",
+                None,
+            )
+
+            if (
+                reason
+                and reason not in reasons
+            ):
+                reasons.append(
+                    reason,
+                )
+
+        return reasons
 
     def _deduplicate(
         self,
@@ -216,14 +329,17 @@ class BlastRadiusAnalyzer(AgentStep):
                 unique[key] = impact
                 continue
 
-            existing.severity = self._max_severity(
-                existing.severity,
-                impact.severity,
+            existing.severity = (
+                self._max_severity(
+                    existing.severity,
+                    impact.severity,
+                )
             )
 
             if (
                 impact.reason
-                and impact.reason not in existing.reason
+                and impact.reason
+                not in existing.reason
             ):
                 existing.reason = (
                     f"{existing.reason} "
