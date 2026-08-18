@@ -15,7 +15,7 @@ class OllamaProvider(BaseLLMProvider):
         self,
         model: str = llm_model,
         base_url: str = "http://localhost:11434",
-        timeout: int = 120,
+        timeout: int = 300,
     ):
 
         self.model = model

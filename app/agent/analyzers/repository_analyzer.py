@@ -10,6 +10,10 @@ class RepositoryAnalyzer(AgentStep):
 
     name = "Repository Analyzer"
 
+    required_context = {
+        "repositories",
+    }
+
     def execute(
         self,
         ctx: AnalysisContext,

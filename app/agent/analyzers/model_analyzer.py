@@ -10,6 +10,10 @@ class ModelAnalyzer(AgentStep):
 
     name = "Model Analyzer"
 
+    required_context = {
+        "models",
+    }
+
     def execute(
         self,
         ctx: AnalysisContext,

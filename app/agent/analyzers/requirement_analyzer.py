@@ -100,6 +100,8 @@ class RequirementAnalyzer(AgentStep):
 
     name = "Requirement Planner"
 
+    required_context: set[str] = set()
+
     def execute(
         self,
         ctx: AnalysisContext,

@@ -9,6 +9,10 @@ from app.agent.models import (
 class ComponentImpactAnalyzer(AgentStep):
 
     name = "Component Impact Analyzer"
+    
+    required_context = {
+        "components",
+    }
 
     def execute(
         self,

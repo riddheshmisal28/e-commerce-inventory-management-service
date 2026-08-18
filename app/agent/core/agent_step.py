@@ -12,6 +12,8 @@ class AgentStep(ABC):
 
     name = "Unnamed Step"
 
+    required_context: set[str] = set()
+
     @abstractmethod
     def execute(
         self,

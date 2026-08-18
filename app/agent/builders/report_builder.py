@@ -26,20 +26,29 @@ class ReportBuilder(AgentStep):
 
     name = "Report Builder"
 
+    required_context: set[str] = set()
+
     def execute(
         self,
         ctx: AnalysisContext,
     ) -> ImpactAnalysisReport:
 
-        ctx.report = ImpactAnalysisReport(
-
+        report = ImpactAnalysisReport(
             feature_summary=build_feature_summary(
                 ctx.requirement,
             ),
-            component_blast_radius=ctx.blast_radius,
-            potential_data_model_impact=ctx.entity_impacts,
-            api_interface_mutations=ctx.endpoint_impacts,
-            model_impacts=ctx.model_impacts,
+            component_blast_radius=(
+                ctx.blast_radius
+            ),
+            data_model_impact=(
+                ctx.entity_impacts
+            ),
+            api_interface_mutations=(
+                ctx.endpoint_impacts
+            ),
+            model_impacts=(
+                ctx.model_impacts
+            ),
             business_logic_impacts=(
                 ctx.business_logic_impacts
             ),
@@ -49,18 +58,26 @@ class ReportBuilder(AgentStep):
             integration_impacts=(
                 ctx.integration_impacts
             ),
-            component_impacts=ctx.component_impacts,
+            component_impacts=(
+                ctx.component_impacts
+            ),
             clarification_questions=(
                 build_clarification_questions(
                     ctx.requirement,
                 )
             ),
-            test_scenarios=build_test_scenarios(
-                ctx.requirement,
+            test_scenarios=(
+                build_test_scenarios(
+                    ctx.requirement,
+                )
             ),
-            bdd_scenarios=build_bdd_scenarios(
-                ctx.requirement,
+            bdd_scenarios=(
+                build_bdd_scenarios(
+                    ctx.requirement,
+                )
             ),
         )
 
-        return ctx.report
+        ctx.report = report
+
+        return report

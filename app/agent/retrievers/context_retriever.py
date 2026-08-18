@@ -13,6 +13,8 @@ class ContextRetriever(AgentStep):
 
     name = "Context Retriever"
 
+    required_context: set[str] = set()
+
     def __init__(self):
         self.client = EngineeringContextClient()
 

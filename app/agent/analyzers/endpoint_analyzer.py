@@ -74,6 +74,10 @@ class EndpointAnalyzer(AgentStep):
 
     name = "Endpoint Analyzer"
 
+    required_context = {
+        "endpoints",
+    }
+
     def execute(
         self,
         ctx: AnalysisContext,

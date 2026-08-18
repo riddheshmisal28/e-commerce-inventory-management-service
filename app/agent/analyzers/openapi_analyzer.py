@@ -10,6 +10,10 @@ class OpenAPIAnalyzer(AgentStep):
 
     name = "OpenAPI Analyzer"
 
+    required_context = {
+        "openapi",
+    }
+
     def execute(
         self,
         ctx: AnalysisContext,

@@ -10,6 +10,10 @@ class IntegrationAnalyzer(AgentStep):
 
     name = "Integration Analyzer"
 
+    required_context = {
+        "integrations",
+    }
+
     def execute(
         self,
         ctx: AnalysisContext,

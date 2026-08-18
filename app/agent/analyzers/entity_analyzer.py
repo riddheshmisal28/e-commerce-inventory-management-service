@@ -1,8 +1,10 @@
 from app.agent.core.agent_step import AgentStep
+
 from app.agent.models import (
     AnalysisContext,
     DataModelImpact,
 )
+
 
 ENTITY_RULES = [
     {
@@ -15,16 +17,41 @@ ENTITY_RULES = [
             "quantity",
         ],
         "impacts": [
-            "Inventory quantity tracking exists. Low stock alert evaluation logic may be required.",
-            "Consider adding low_stock_threshold configuration.",
-            "Consider storing last_alert_timestamp to avoid duplicate notifications.",
+            {
+                "change_type": "BUSINESS_RULE",
+                "change": (
+                    "Inventory quantity tracking exists. "
+                    "Low stock alert evaluation logic "
+                    "may be required."
+                ),
+            },
+            {
+                "change_type": "ADD_FIELD",
+                "change": (
+                    "Consider adding "
+                    "low_stock_threshold configuration."
+                ),
+            },
+            {
+                "change_type": "ADD_FIELD",
+                "change": (
+                    "Consider storing "
+                    "last_alert_timestamp "
+                    "to avoid duplicate notifications."
+                ),
+            },
         ],
-    },  
+    },
 ]
+
 
 class EntityAnalyzer(AgentStep):
 
     name = "Entity Analyzer"
+
+    required_context = {
+        "entities",
+    }
 
     def execute(
         self,
@@ -37,7 +64,9 @@ class EntityAnalyzer(AgentStep):
 
         impacts: list[DataModelImpact] = []
 
-        for entity in ctx.engineering_context.entities:
+        for entity in (
+            ctx.engineering_context.entities
+        ):
 
             entity_name = entity.get(
                 "name",
@@ -115,13 +144,14 @@ class EntityAnalyzer(AgentStep):
     def _build_impacts(
         self,
         entity_name: str,
-        changes: list[str],
+        impacts: list[dict[str, str]],
     ) -> list[DataModelImpact]:
 
         return [
             DataModelImpact(
                 entity=entity_name,
-                change=change,
+                change_type=impact["change_type"],
+                change=impact["change"],
             )
-            for change in changes
+            for impact in impacts
         ]

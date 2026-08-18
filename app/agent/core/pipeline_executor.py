@@ -1,11 +1,12 @@
 import time
 
 from app.agent.core.agent_step import AgentStep
-from app.core.logger import get_logger
 from app.agent.models import (
     AnalysisContext,
     PipelineResult,
 )
+from app.core.logger import get_logger
+
 
 logger = get_logger(__name__)
 
@@ -24,6 +25,16 @@ class PipelineExecutor:
 
         for step in pipeline:
 
+            if not self._should_execute(
+                step,
+                ctx,
+            ):
+                self.on_step_skipped(
+                    step,
+                    ctx,
+                )
+                continue
+
             start = time.perf_counter()
 
             self.before_step(
@@ -34,13 +45,14 @@ class PipelineExecutor:
             try:
 
                 ctx.execution_history.append(
-                    step.name
+                    step.name,
                 )
 
                 step.execute(ctx)
 
                 elapsed = (
-                    time.perf_counter() - start
+                    time.perf_counter()
+                    - start
                 )
 
                 ctx.execution_metrics[
@@ -56,7 +68,8 @@ class PipelineExecutor:
             except Exception:
 
                 elapsed = (
-                    time.perf_counter() - start
+                    time.perf_counter()
+                    - start
                 )
 
                 self.on_error(
@@ -70,14 +83,21 @@ class PipelineExecutor:
         self.after_pipeline(ctx)
 
         total_elapsed = (
-            time.perf_counter() - total_start
+            time.perf_counter()
+            - total_start
         )
 
         result = PipelineResult(
             success=True,
-            total_duration_ms=total_elapsed * 1000,
-            executed_steps=ctx.execution_history.copy(),
-            execution_metrics=ctx.execution_metrics.copy(),
+            total_duration_ms=(
+                total_elapsed * 1000
+            ),
+            executed_steps=(
+                ctx.execution_history.copy()
+            ),
+            execution_metrics=(
+                ctx.execution_metrics.copy()
+            ),
             report=ctx.report,
         )
 
@@ -85,13 +105,63 @@ class PipelineExecutor:
 
         return result
 
+    def _should_execute(
+        self,
+        step: AgentStep,
+        ctx: AnalysisContext,
+    ) -> bool:
+
+        required_context = getattr(
+            step,
+            "required_context",
+            set(),
+        )
+
+        if not required_context:
+            return True
+
+        plan = ctx.context_plan
+
+        if plan is None:
+            logger.warning(
+                "Skipping step '%s': "
+                "ContextPlan is not available.",
+                step.name,
+            )
+
+            return False
+
+        return all(
+            self._context_requested(
+                context_type,
+                plan,
+            )
+            for context_type in required_context
+        )
+
+    def _context_requested(
+        self,
+        context_type: str,
+        plan,
+    ) -> bool:
+
+        attribute = (
+            f"need_{context_type}"
+        )
+
+        return getattr(
+            plan,
+            attribute,
+            False,
+        )
+
     def before_pipeline(
         self,
         ctx: AnalysisContext,
     ) -> None:
 
         logger.info(
-            "Starting pipeline execution."
+            "Starting pipeline execution.",
         )
 
     def after_pipeline(
@@ -100,7 +170,7 @@ class PipelineExecutor:
     ) -> None:
 
         logger.info(
-            "Pipeline execution completed."
+            "Pipeline execution completed.",
         )
 
     def before_step(
@@ -125,6 +195,18 @@ class PipelineExecutor:
             "Completed step: %s (%.3f ms)",
             step.name,
             elapsed * 1000,
+        )
+
+    def on_step_skipped(
+        self,
+        step: AgentStep,
+        ctx: AnalysisContext,
+    ) -> None:
+
+        logger.info(
+            "Skipping step: %s "
+            "(required context not requested)",
+            step.name,
         )
 
     def on_error(

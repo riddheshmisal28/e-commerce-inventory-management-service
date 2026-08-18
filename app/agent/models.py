@@ -19,22 +19,50 @@ class BlastRadius(BaseModel):
 
 class DataModelImpact(BaseModel):
     entity: str
+    change_type: str
     change: str
+    reason: str | None = None
 
 class ApiMutation(BaseModel):
     endpoint: str
     change_type: str
     details: str
+    reason: str | None = None
 
 class ModelImpact(BaseModel):
     model: str
+    change_type: str
     change: str
+    reason: str | None = None
 
 class ComponentImpact(BaseModel):
     component: str
     impact_type: str
     change: str
     reason: str | None = None
+
+class LLMImpactAnalysis(BaseModel):
+    model_impacts: list[ModelImpact] = Field(
+        default_factory=list,
+    )
+    business_logic_impacts: list[ComponentImpact] = Field(
+        default_factory=list,
+    )
+    repository_impacts: list[ComponentImpact] = Field(
+        default_factory=list,
+    )
+    integration_impacts: list[ComponentImpact] = Field(
+        default_factory=list,
+    )
+    component_impacts: list[ComponentImpact] = Field(
+        default_factory=list,
+    )
+    endpoint_impacts: list[ApiMutation] = Field(
+        default_factory=list,
+    )
+    reasoning: list[str] = Field(
+        default_factory=list,
+    )
 
 class BDDScenario(BaseModel):
     scenario: str
@@ -50,7 +78,7 @@ class TestScenarios(BaseModel):
 class ImpactAnalysisReport(BaseModel):
     feature_summary: FeatureSummary
     component_blast_radius: list[BlastRadius]
-    potential_data_model_impact: list[DataModelImpact]
+    data_model_impact: list[DataModelImpact]
     api_interface_mutations: list[ApiMutation]
     model_impacts: list[ModelImpact] = Field(
         default_factory=list,
@@ -199,3 +227,26 @@ class LLMResponse(BaseModel):
     model: str
     response: str
     duration_ms: float
+
+class ImpactReasoningResult(BaseModel):
+    data_model_impacts: list[DataModelImpact] = Field(
+        default_factory=list,
+    )
+    api_interface_mutations: list[ApiMutation] = Field(
+        default_factory=list,
+    )
+    model_impacts: list[ModelImpact] = Field(
+        default_factory=list,
+    )
+    business_logic_impacts: list[ComponentImpact] = Field(
+        default_factory=list,
+    )
+    repository_impacts: list[ComponentImpact] = Field(
+        default_factory=list,
+    )
+    integration_impacts: list[ComponentImpact] = Field(
+        default_factory=list,
+    )
+    component_impacts: list[ComponentImpact] = Field(
+        default_factory=list,
+    )
