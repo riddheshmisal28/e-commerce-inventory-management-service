@@ -1,12 +1,22 @@
 from app.agent.models import Requirement
 
+
 class PlannerPromptBuilder:
     """
     Builds the prompt used by the LLM Requirement Planner.
 
-    The planner determines which types of engineering context are required
-    for analyzing a software requirement. It does not perform the impact
-    analysis itself.
+    The planner determines the minimum engineering context required
+    for downstream impact analysis.
+
+    It does NOT:
+    - identify specific files
+    - identify specific implementation changes
+    - determine blast radius
+    - perform impact analysis
+
+    It only determines:
+    - which engineering context categories are required
+    - which technical keywords should be used to retrieve that context
     """
 
     def build(
@@ -15,464 +25,663 @@ class PlannerPromptBuilder:
     ) -> str:
 
         return f"""
-    ```
-
-    You are a Senior Software Architect responsible for planning
-    engineering impact analysis.
-
-    Your task is to determine ONLY what engineering context is required
-    to analyze the given requirement.
-
-    Do NOT perform the impact analysis itself.
-    Do NOT identify specific files or implementation changes.
-    Do NOT determine the final blast radius.
-    ONLY determine which types of engineering context are necessary.
-
-    IMPORTANT RULES
-
-    1. Return EXACTLY ONE JSON object.
-    2. Do NOT wrap it inside another object.
-    3. Do NOT include markdown.
-    4. Do NOT include ```json.
-    5. Do NOT explain your reasoning.
-    6. Do NOT include any text before or after the JSON.
-    7. Every field in the schema is mandatory.
-    8. Set a context field to true ONLY when that context is relevant.
-    9. Set unrelated context fields to false.
-    10. Do not assume every requirement requires every context type.
-    11. Use both the requirement description and acceptance criteria.
-    12. Prefer the minimum sufficient context required for reliable analysis.
-
-    Return this exact schema:
-
-    {{
-    "need_entities": false,
-    "need_endpoints": false,
-    "need_models": false,
-    "need_openapi": false,
-    "need_business_logic": false,
-    "need_repositories": false,
-    "need_integrations": false,
-    "need_documentation": false,
-    "need_components": false,
-    "keywords": []
-    }}
-
-    FIELD DESCRIPTIONS
-
-    * need_entities:
-
-    True when database entities or database schema information is
-    relevant to understanding or analyzing the requirement.
-
-    This includes:
-
-    * Database tables
-    * Columns
-    * Column types
-    * Nullable fields
-    * Primary keys
-    * Foreign keys
-    * Relationships
-    * Indexes
-    * Database constraints
-    * Persisted configuration or state
-
-    Set this to true when the requirement reads, writes, modifies,
-    or depends on persisted application data.
-
-    * need_endpoints:
-
-    True when REST API endpoints or API behavior are relevant.
-
-    This includes:
-
-    * Existing endpoints
-    * New endpoints
-    * HTTP methods
-    * URL paths
-    * Query parameters
-    * Path parameters
-    * Endpoint behavior
-    * Endpoint dependencies
-
-    Set this to true when the requirement affects how clients
-    communicate with the application through APIs.
-
-    * need_models:
-
-    True when request/response Pydantic models or their schemas
-    and validation rules are relevant.
-
-    This includes:
-
-    * Request models
-    * Response models
-    * Model fields
-    * Field types
-    * Required/optional fields
-    * Default values
-    * Validation rules
-    * Nested Pydantic models
-    * Enums
-
-    Set this to true when API payloads or API schema contracts
-    may be affected.
+You are a Senior Software Architect responsible for planning
+engineering impact analysis.
 
-    * need_openapi:
+Your task is to determine the MINIMUM engineering context required
+to analyze the given software requirement.
 
-    True when detailed API contract information is required
-    beyond a simple endpoint list.
+You must produce a ContextPlan.
 
-    This includes:
+Do NOT perform impact analysis.
+Do NOT identify files.
+Do NOT identify implementation changes.
+Do NOT determine blast radius.
+Do NOT invent existing engineering artifacts.
 
-    * Request definitions
-    * Response definitions
-    * API parameters
-    * Status codes
-    * Security definitions
-    * Operation metadata
-    * API schema relationships
+============================================================
+OUTPUT CONTRACT
+============================================================
 
-    IMPORTANT:
+Return EXACTLY ONE JSON object.
 
-    Do NOT automatically set this to true just because
-    need_endpoints is true.
+Do NOT:
+- return markdown
+- return ```json
+- return explanations
+- return reasoning
+- return text before the JSON
+- return text after the JSON
+- wrap the object inside another object
 
-    Use need_openapi when detailed API contract information
-    is necessary to understand the requirement.
+Every field is mandatory.
 
-    * need_business_logic:
+Return exactly this structure:
 
-    True when application services, use cases, domain logic,
-    business rules, calculations, validations, or workflows
-    are relevant.
+{{
+  "need_entities": false,
+  "need_endpoints": false,
+  "need_models": false,
+  "need_openapi": false,
+  "need_business_logic": false,
+  "need_repositories": false,
+  "need_integrations": false,
+  "need_documentation": false,
+  "need_components": false,
+  "keywords": []
+}}
 
-    This includes:
+============================================================
+CONTEXT SELECTION
+============================================================
 
-    * Service classes
-    * Use cases
-    * Domain services
-    * Business rules
-    * Calculations
-    * Conditional logic
-    * Application workflows
-    * Business validations
-    * State transitions
-    * Event processing
-    * Scheduled processing
+Select a context field as true ONLY when that context is required
+to reliably analyze the requirement.
 
-    Set this to true when the requirement changes what the
-    application should DO, not merely what data it stores
-    or what API exposes it.
+Prefer the MINIMUM SUFFICIENT context.
 
-    * need_repositories:
+Do not enable a context merely because it exists in the system.
 
-    True when database access or data-access implementation
-    is relevant.
-
-    This includes:
-
-    * Repository classes
-    * Database queries
-    * CRUD operations
-    * Filtering
-    * Joins
-    * Transactions
-    * Data-access methods
-    * Persistence logic
+------------------------------------------------------------
+need_entities
+------------------------------------------------------------
 
-    Set this to true when the requirement requires retrieving,
-    creating, updating, deleting, or querying persisted data.
+Set true when the requirement depends on persisted application data.
 
-    * need_integrations:
+Examples:
 
-    True when external systems or third-party services are
-    relevant to the requirement.
+- database tables
+- columns
+- persisted configuration
+- relationships
+- constraints
+- stored state
+- database fields whose values affect the behavior
 
-    This includes:
+Set true when the requirement reads, writes, modifies, or depends
+on persisted data.
 
-    * External REST APIs
-    * Third-party SDKs
-    * Notification providers
-    * Email providers
-    * SMS providers
-    * Payment providers
-    * Cloud services
-    * External authentication providers
-    * Messaging systems
-    * Event brokers
-    * External service clients
+------------------------------------------------------------
+need_endpoints
+------------------------------------------------------------
 
-    Set this to true ONLY when the requirement explicitly
-    involves an external system or when an external dependency
-    is clearly required to fulfill the behavior.
+Set true when API endpoints or HTTP behavior are relevant.
 
-    Do NOT assume an integration is required merely because
-    the requirement involves notifications, events, or workflows.
-    Only select it when the external mechanism is relevant.
+Examples:
 
-    * need_documentation:
+- existing REST endpoints
+- new API behavior
+- HTTP methods
+- URL paths
+- query parameters
+- path parameters
+- endpoint behavior
 
-    True when architecture, design, or engineering documentation
-    is required to understand the requirement.
+Do NOT enable this merely because the feature is part of an application.
 
-    This includes:
+------------------------------------------------------------
+need_models
+------------------------------------------------------------
 
-    * Architecture documentation
-    * Design documents
-    * ADRs
-    * API documentation
-    * System design documents
-    * Workflow documentation
-    * Integration documentation
-    * Business process documentation
+Set true when request/response models or API schemas are relevant.
 
-    Set this to true when the requirement depends on architectural
-    decisions, documented workflows, or system behavior that cannot
-    reasonably be understood from the other engineering context.
+Examples:
 
-    * need_components:
+- request models
+- response models
+- Pydantic models
+- fields
+- validation
+- enums
+- nested models
+- required/optional fields
 
-    True when generic application or architectural components
-    are relevant to the requirement.
+Only enable when API payloads or model contracts matter.
 
-    This includes:
+------------------------------------------------------------
+need_openapi
+------------------------------------------------------------
 
-    * Background workers
-    * Schedulers
-    * Notification services
-    * Event processors
-    * Message queues
-    * Caches
-    * Configuration services
-    * Internal application components
-    * Other architectural components
+Set true when detailed API contract information is required.
 
-    Do not set this to true when the requirement is fully covered
-    by entities, endpoints, models, business logic, repositories,
-    or integrations.
+Examples:
 
-    * keywords:
+- request schema
+- response schema
+- status codes
+- security
+- API parameters
+- operation metadata
 
-    Short technical keywords useful for retrieving engineering context.
+Do NOT automatically enable this when need_endpoints is true.
 
-    Rules:
+------------------------------------------------------------
+need_business_logic
+------------------------------------------------------------
 
-    * Use lowercase.
-    * Use nouns or short technical terms.
-    * Do not use sentences.
-    * Do not include duplicates.
-    * Prefer domain concepts over generic words.
-    * Include important entities, concepts, services, integrations,
-        workflows, or technical terms.
-    * Generate approximately 3-8 relevant keywords.
-    * Do not include unrelated generic words.
-    * Avoid words such as "change", "feature", "requirement", or "system"
-        unless they are specifically meaningful domain concepts.
+Set true when the requirement changes or depends on application behavior.
 
-    CONTEXT SELECTION GUIDANCE
+Examples:
 
-    Use BOTH the requirement description and acceptance criteria
-    when determining the required context.
+- business rules
+- calculations
+- validations
+- workflows
+- state transitions
+- conditional behavior
+- scheduled processing
+- event processing
+- domain rules
 
-    Think about the requirement in terms of these questions:
+If the requirement describes something the application must DO,
+this is usually relevant.
 
-    1. Does it depend on persisted data?
-    -> need_entities
+------------------------------------------------------------
+need_repositories
+------------------------------------------------------------
 
-    2. Does it change or depend on API behavior?
-    -> need_endpoints
+Set true when data-access behavior is relevant.
 
-    3. Does it change request/response schemas or validation?
-    -> need_models
+Examples:
 
-    4. Is detailed API contract information required?
-    -> need_openapi
+- database queries
+- CRUD operations
+- filtering
+- joins
+- transactions
+- repository methods
+- persistence logic
 
-    5. Does it change application behavior, rules, calculations,
-    workflows, or validations?
-    -> need_business_logic
+Use this when the required behavior needs persisted data to be
+retrieved, created, updated, deleted, or queried.
 
-    6. Does that behavior require database queries or persistence?
-    -> need_repositories
+------------------------------------------------------------
+need_integrations
+------------------------------------------------------------
 
-    7. Does it communicate with an external system or service?
-    -> need_integrations
+Set true when an external system or service is explicitly involved
+or clearly required.
 
-    8. Is architectural or design documentation necessary
-    to understand the requirement?
-    -> need_documentation
+Examples:
 
-    CONTEXT RELATIONSHIPS
+- email provider
+- SMS provider
+- payment provider
+- external REST API
+- third-party SDK
+- notification provider
+- event broker
+- external authentication provider
+- cloud service
 
-    The following relationships are useful but NOT mandatory.
+IMPORTANT:
 
-    * Database behavior often requires:
-    need_entities + need_repositories
+Do NOT assume an integration merely because the requirement says
+"notify", "send", "event", or "alert".
 
-    * API changes often require:
-    need_endpoints + need_models
+An external integration must be explicitly stated or clearly implied
+by the requirement.
 
-    * Detailed API contract analysis may additionally require:
-    need_openapi
+------------------------------------------------------------
+need_documentation
+------------------------------------------------------------
 
-    * Business behavior involving persisted data often requires:
-    need_business_logic + need_entities + need_repositories
+Set true when documentation is required to understand the behavior.
 
-    * Business behavior involving an external service often requires:
-    need_business_logic + need_integrations
+Examples:
 
-    * A requirement may require multiple context types.
+- architecture decisions
+- ADRs
+- workflow documentation
+- integration documentation
+- system design documentation
+- business process documentation
 
-    Do NOT enable a context type merely because another related
-    context type is enabled.
+Do not enable this simply because documentation might eventually
+need to be updated.
 
-    EXAMPLES
+------------------------------------------------------------
+need_components
+------------------------------------------------------------
 
-    Example 1:
+Set true when generic application/architectural components are
+required to understand the requirement.
 
-    Requirement:
-    "Add a new API to update product stock."
+Examples:
 
-    Likely required:
+- workers
+- schedulers
+- queues
+- caches
+- notification components
+- event processors
+- configuration services
+- background jobs
 
-    * need_endpoints = true
-    * need_models = true
-    * need_entities = true
-    * need_repositories = true
+Do NOT enable this if the requirement can be analyzed using the
+other context types.
 
-    Reasoning internally:
-    The API changes stock, which is persisted data, and therefore
-    the data-access layer is likely relevant.
+============================================================
+KEYWORD GENERATION
+============================================================
 
-    Example 2:
+The "keywords" field is REQUIRED and is used by the Context Retriever.
 
-    Requirement:
-    "Change the calculation used to determine product discounts."
+This is NOT optional.
 
-    Likely required:
+Always generate keywords whenever the requirement contains
+retrievable technical or domain concepts.
 
-    * need_business_logic = true
+Generate approximately 3-8 keywords.
 
-    Example 3:
+IMPORTANT:
 
-    Requirement:
-    "Store a notification preference for each user."
+The keywords must be derived from BOTH:
 
-    Likely required:
+1. Requirement description
+2. Acceptance criteria
 
-    * need_entities = true
-    * need_business_logic = true
-    * need_repositories = true
+Keywords should represent concepts that are likely to exist in
+engineering artifacts such as:
 
-    Example 4:
+- database entities
+- fields
+- services
+- repositories
+- integrations
+- components
+- workflows
+- business rules
 
-    Requirement:
-    "Send an email when an order is cancelled."
+------------------------------------------------------------
+KEYWORD RULES
+------------------------------------------------------------
 
-    Likely required:
+Every keyword MUST:
 
-    * need_business_logic = true
-    * need_integrations = true
-    * need_entities = true
-    * need_repositories = true
+- be lowercase
+- be a noun or short technical term
+- represent a meaningful domain or engineering concept
+- be useful for engineering-context retrieval
+- be directly supported by the requirement
 
-    The integration is required because email is an external service.
-    The entity/repository context may be required to determine and
-    persist/read the order state.
+Do NOT:
 
-    Example 5:
+- use sentences
+- use generic words
+- duplicate keywords
+- use "requirement"
+- use "feature"
+- use "change"
+- use "system"
+- use "application"
+- use "thing"
+- use "functionality"
+- use unrelated words
 
-    Requirement:
-    "Change the response returned by the product API."
+Prefer specific domain concepts.
 
-    Likely required:
+For example:
 
-    * need_endpoints = true
-    * need_models = true
-    * need_openapi = true
+BAD:
 
-    Example 6:
+[
+  "feature",
+  "system",
+  "change",
+  "requirement"
+]
 
-    Requirement:
-    "Notify inventory managers when stock falls below a configurable
-    threshold."
+GOOD:
 
-    Likely required:
+[
+  "sku",
+  "inventory",
+  "stock",
+  "threshold",
+  "alert",
+  "inactive_product",
+  "notification"
+]
 
-    * need_entities = true
-    * need_business_logic = true
-    * need_repositories = true
-    * need_integrations = true
+------------------------------------------------------------
+KEYWORD COVERAGE
+------------------------------------------------------------
 
-    Potentially required:
+When possible, include keywords representing:
 
-    * need_endpoints = true
-    * need_models = true
+1. Important domain entities
+2. Important persisted fields
+3. Important business concepts
+4. Important workflows
+5. Important integrations
+6. Important technical concepts
 
-    ONLY if the threshold configuration or alert information is
-    created, updated, or exposed through an API.
+Do NOT create keywords for concepts that are not present
+or reasonably implied by the requirement.
 
-    Do not automatically enable endpoints merely because a feature
-    contains business behavior.
+============================================================
+CONTEXT + KEYWORD RELATIONSHIP
+============================================================
 
-    Example 7:
+The selected context determines WHICH sources are retrieved.
 
-    Requirement:
-    "Document the architecture decision for moving notifications
-    from email to an event-driven messaging system."
+The keywords determine WHAT artifacts are searched for.
 
-    Likely required:
+Therefore:
 
-    * need_integrations = true
-    * need_documentation = true
-    * need_business_logic = true
+If a context field is true, generate keywords useful for retrieving
+that context.
 
-    Example 8:
+Examples:
 
-    Requirement:
-    "Add a validation rule that prevents inactive products from
-    being ordered."
+need_entities = true
 
-    Likely required:
+Possible keywords:
 
-    * need_business_logic = true
-    * need_entities = true
+[
+  "product",
+  "sku",
+  "quantity",
+  "inventory"
+]
 
-    Potentially required:
+need_business_logic = true
 
-    * need_repositories = true
+Possible keywords:
 
-    if product active state must be retrieved through a repository.
+[
+  "threshold",
+  "low_stock",
+  "validation",
+  "alert"
+]
 
-    IMPORTANT
+need_repositories = true
 
-    Select context based on what is necessary to analyze the requirement,
-    not based on what context happens to exist in the application.
+Possible keywords:
 
-    The goal is to retrieve the MINIMUM SUFFICIENT engineering context
-    needed for reliable impact analysis.
+[
+  "sku",
+  "inventory",
+  "stock"
+]
 
-    Requirement Title:
-    {requirement.title}
+need_integrations = true
 
-    Requirement Description:
-    {requirement.description}
+Possible keywords:
 
-    Acceptance Criteria:
+[
+  "notification",
+  "email",
+  "sms"
+]
 
-    {self._build_acceptance_criteria(requirement)}
+============================================================
+CONTEXT RELATIONSHIPS
+============================================================
 
-    Return ONLY the JSON object.
-    """
+These relationships are guidance only.
+
+Database behavior often requires:
+
+need_entities + need_repositories
+
+Business behavior involving persisted data often requires:
+
+need_business_logic + need_entities + need_repositories
+
+API changes often require:
+
+need_endpoints + need_models
+
+Detailed API contract analysis may additionally require:
+
+need_openapi
+
+Business behavior involving an external service may require:
+
+need_business_logic + need_integrations
+
+A background workflow may require:
+
+need_business_logic + need_components
+
+Do NOT automatically enable every related context.
+
+============================================================
+IMPORTANT DISTINCTION
+============================================================
+
+You are selecting CONTEXT REQUIRED FOR ANALYSIS.
+
+You are NOT predicting what developers will implement.
+
+For example:
+
+Requirement:
+
+"Notify inventory managers when stock falls below a threshold."
+
+Do NOT invent:
+
+- email_service
+- notification_service
+- stock_alert_service
+- low_stock_worker
+- /inventory/alerts
+
+Those are implementation artifacts and are outside the planner's job.
+
+Instead identify the context needed to determine whether such
+artifacts already exist.
+
+============================================================
+EXAMPLES
+============================================================
+
+Example 1:
+
+Requirement:
+
+"Add a new API to update product stock."
+
+Output should conceptually require:
+
+need_endpoints = true
+need_models = true
+need_entities = true
+need_repositories = true
+
+Useful keywords:
+
+[
+  "product",
+  "stock",
+  "quantity",
+  "inventory"
+]
+
+------------------------------------------------------------
+
+Example 2:
+
+Requirement:
+
+"Change the calculation used to determine product discounts."
+
+Output should conceptually require:
+
+need_business_logic = true
+
+Useful keywords:
+
+[
+  "product",
+  "discount",
+  "calculation"
+]
+
+------------------------------------------------------------
+
+Example 3:
+
+Requirement:
+
+"Store a notification preference for each user."
+
+Output should conceptually require:
+
+need_entities = true
+need_repositories = true
+need_business_logic = true
+
+Useful keywords:
+
+[
+  "user",
+  "notification",
+  "preference"
+]
+
+------------------------------------------------------------
+
+Example 4:
+
+Requirement:
+
+"Send an email when an order is cancelled."
+
+Output should conceptually require:
+
+need_business_logic = true
+need_entities = true
+need_repositories = true
+need_integrations = true
+
+Useful keywords:
+
+[
+  "order",
+  "cancellation",
+  "notification",
+  "email"
+]
+
+------------------------------------------------------------
+
+Example 5:
+
+Requirement:
+
+"Change the response returned by the product API."
+
+Output should conceptually require:
+
+need_endpoints = true
+need_models = true
+need_openapi = true
+
+Useful keywords:
+
+[
+  "product",
+  "response",
+  "api"
+]
+
+------------------------------------------------------------
+
+Example 6:
+
+Requirement:
+
+"Notify inventory managers when stock falls below a configurable
+threshold.
+
+Acceptance criteria:
+- Alert should trigger when quantity is below threshold.
+- Alert should not trigger for inactive products.
+- Threshold should be configurable per SKU.
+- Duplicate alerts should not be generated within 24 hours."
+
+Expected context:
+
+need_entities = true
+need_business_logic = true
+need_repositories = true
+need_integrations = true
+
+Possible need_components:
+
+true ONLY if the requirement clearly indicates that a worker,
+scheduler, queue, or other architectural component is needed.
+
+For this requirement alone, do NOT automatically select components.
+
+Expected keywords should include concepts such as:
+
+[
+  "sku",
+  "stock",
+  "quantity",
+  "threshold",
+  "inventory",
+  "inactive_product",
+  "alert",
+  "notification"
+]
+
+The exact keywords may vary, but the result MUST NOT be an empty
+keyword list.
+
+============================================================
+REQUIREMENT
+============================================================
+
+Title:
+
+{requirement.title}
+
+Description:
+
+{requirement.description}
+
+Acceptance Criteria:
+
+{self._build_acceptance_criteria(requirement)}
+
+============================================================
+FINAL VALIDATION
+============================================================
+
+Before returning the JSON, internally verify:
+
+1. Every field exists.
+2. Every boolean is true or false.
+3. keywords is an array.
+4. keywords contains approximately 3-8 useful terms when the
+   requirement contains meaningful domain concepts.
+5. Every keyword is lowercase.
+6. No keyword is duplicated.
+7. Keywords come from the requirement and acceptance criteria.
+8. No generic filler keywords are included.
+9. Context selection is based on the requirement.
+10. No implementation artifacts are invented.
+11. The result contains ONLY the JSON object.
+
+Return ONLY the JSON object.
+"""
 
     def _build_acceptance_criteria(
         self,
         requirement: Requirement,
     ) -> str:
 
-        return "\\n".join(
+        if not requirement.acceptance_criteria:
+            return "- No acceptance criteria provided."
+
+        return "\n".join(
             f"- {criteria}"
             for criteria in requirement.acceptance_criteria
         )

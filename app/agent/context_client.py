@@ -131,6 +131,20 @@ class EngineeringContextClient:
         )
 
     # ------------------------------------------------------------------
+    # Components
+    # ------------------------------------------------------------------
+
+    def get_components(
+        self,
+        keywords: list[str] | None = None,
+    ) -> dict[str, Any]:
+
+        return self._get_with_keywords(
+            "/engineering/components",
+            keywords,
+        )
+
+    # ------------------------------------------------------------------
     # Documentation
     # ------------------------------------------------------------------
 

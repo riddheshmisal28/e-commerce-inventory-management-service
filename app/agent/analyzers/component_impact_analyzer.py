@@ -28,9 +28,9 @@ class ComponentImpactAnalyzer(AgentStep):
             if not component:
                 continue
 
-            impact_type = item.get("impact_type")
+            change_type = item.get("change_type")
 
-            if not impact_type:
+            if not change_type:
                 continue
 
             change = item.get("change")
@@ -41,7 +41,7 @@ class ComponentImpactAnalyzer(AgentStep):
             impacts.append(
                 ComponentImpact(
                     component=component,
-                    impact_type=impact_type,
+                    change_type=change_type,
                     change=change,
                     reason=item.get("reason"),
                 )

@@ -49,7 +49,7 @@ class RepositoryAnalyzer(AgentStep):
             impacts.append(
                 ComponentImpact(
                     component=repository,
-                    impact_type="Repository",
+                    change_type="Repository",
                     change=change,
                     reason=item.get("reason"),
                 )

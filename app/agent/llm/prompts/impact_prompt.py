@@ -116,7 +116,7 @@ BUSINESS LOGIC IMPACTS
 Use business_logic_impacts for services, domain logic, workflows,
 calculations, validations, rules, and application behavior.
 
-Possible impact_type values:
+Possible change_type values:
 
 - ADD_RULE
 - MODIFY_RULE
@@ -131,7 +131,7 @@ Each business logic impact must contain:
 
 {{
     "component": "InventoryService",
-    "impact_type": "ADD_RULE",
+    "change_type": "ADD_RULE",
     "change": "Evaluate inventory quantity against the configured threshold.",
     "reason": "The requirement requires low-stock detection."
 }}
@@ -141,7 +141,7 @@ REPOSITORY IMPACTS
 Use repository_impacts when database access or persistence behavior
 must change.
 
-Possible impact_type values:
+Possible change_type values:
 
 - ADD_QUERY
 - MODIFY_QUERY
@@ -155,7 +155,7 @@ Each repository impact must contain:
 
 {{
     "component": "SKURepository",
-    "impact_type": "MODIFY_QUERY",
+    "change_type": "MODIFY_QUERY",
     "change": "Retrieve the low-stock threshold along with inventory quantity.",
     "reason": "The business rule requires both values to evaluate stock status."
 }}
@@ -165,7 +165,7 @@ INTEGRATION IMPACTS
 Use integration_impacts when an external service, provider, messaging
 system, or third-party system is involved.
 
-Possible impact_type values:
+Possible change_type values:
 
 - ADD_INTEGRATION
 - MODIFY_INTEGRATION
@@ -178,7 +178,7 @@ Each integration impact must contain:
 
 {{
     "component": "NotificationService",
-    "impact_type": "ADD_NOTIFICATION",
+    "change_type": "ADD_NOTIFICATION",
     "change": "Send a low-stock notification to inventory managers.",
     "reason": "The requirement explicitly requires inventory managers to be notified."
 }}
@@ -192,7 +192,7 @@ Use component_impacts for application or architectural components
 that do not fit specifically into business logic, repositories, or
 integrations.
 
-Possible impact_type values:
+Possible change_type values:
 
 - ADD_COMPONENT
 - MODIFY_COMPONENT
@@ -208,7 +208,7 @@ Each component impact must contain:
 
 {{
     "component": "LowStockMonitor",
-    "impact_type": "ADD_WORKER",
+    "change_type": "ADD_WORKER",
     "change": "Add a background process to evaluate stock levels.",
     "reason": "The requirement requires stock conditions to be evaluated independently of user requests."
 }}

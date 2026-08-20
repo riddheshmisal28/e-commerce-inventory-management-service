@@ -14,7 +14,7 @@ BUSINESS_LOGIC_RULES = [
             "quantity",
             "threshold",
         ],
-        "impact_type": "ADD_RULE",
+        "change_type": "ADD_RULE",
         "change": (
             "Evaluate inventory quantity against "
             "the configured low-stock threshold "
@@ -31,7 +31,7 @@ BUSINESS_LOGIC_RULES = [
             "notification",
             "alert",
         ],
-        "impact_type": "ADD_RULE",
+        "change_type": "ADD_RULE",
         "change": (
             "Prevent duplicate low-stock alerts "
             "until the inventory condition is reset."
@@ -97,8 +97,8 @@ class BusinessLogicAnalyzer(AgentStep):
             impacts.append(
                 ComponentImpact(
                     component=component,
-                    impact_type=item.get(
-                        "impact_type",
+                    change_type=item.get(
+                        "change_type",
                         "MODIFY_RULE",
                     ),
                     change=change,
@@ -149,8 +149,8 @@ class BusinessLogicAnalyzer(AgentStep):
             impacts.append(
                 ComponentImpact(
                     component="Inventory Business Logic",
-                    impact_type=rule[
-                        "impact_type"
+                    change_type=rule[
+                        "change_type"
                     ],
                     change=change,
                     reason=rule[

@@ -311,10 +311,28 @@ keywords: str | None,
 
 @router.get("/components")
 def get_components(
-    self,
-    keywords: list[str] | None = None,
-):
-    return self._get_with_keywords(
-        "/engineering/components",
-        keywords,
-    )
+    keywords: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Returns application component context relevant to the supplied keywords.
+
+    Scans the source tree for classes and functions that reference
+    the supplied domain keywords.
+    """
+
+    parsed_keywords = _parse_keywords(keywords)
+
+    scanner = SourceScanner()
+
+    results = scanner.search(parsed_keywords)
+
+    return [
+        {
+            "component": item["name"],
+            "file": item["file"],
+            "type": item["type"],
+            "line": item["line"],
+            "keywords": item["keywords"],
+        }
+        for item in results
+    ]

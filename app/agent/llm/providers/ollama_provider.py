@@ -16,11 +16,13 @@ class OllamaProvider(BaseLLMProvider):
         model: str = llm_model,
         base_url: str = "http://localhost:11434",
         timeout: int = 300,
+        json_mode: bool = False,
     ):
 
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.json_mode = json_mode
 
     def generate(
         self,
@@ -28,13 +30,18 @@ class OllamaProvider(BaseLLMProvider):
     ) -> str:
         logger.info("Sending prompt to Ollama...")
         logger.info("Prompt: %s", prompt)
+        payload: dict = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+        }
+
+        if self.json_mode:
+            payload["format"] = "json"
+
         response = requests.post(
             f"{self.base_url}/api/generate",
-            json={
-                "model": self.model,
-                "prompt": prompt,
-                "stream": False,
-            },
+            json=payload,
             timeout=self.timeout,
         )
 

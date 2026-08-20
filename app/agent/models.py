@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 class FeatureSummary(BaseModel):
     name: str
@@ -54,8 +54,9 @@ class ModelImpact(BaseModel):
     )
 
 class ComponentImpact(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    change_type: str
     component: str
-    impact_type: str
     change: str
     reason: str | None = None
     relevance_score: float | None = None
@@ -288,6 +289,7 @@ class SemanticImpactDecision(BaseModel):
     evidence: list[str] = Field(
         default_factory=list,
     )
+    impact_id: int | None = None
 
 class SemanticImpactRefinementResult(BaseModel):
     decisions: list[SemanticImpactDecision] = Field(

@@ -49,7 +49,7 @@ class IntegrationAnalyzer(AgentStep):
             impacts.append(
                 ComponentImpact(
                     component=integration,
-                    impact_type="Integration",
+                    change_type="Integration",
                     change=change,
                     reason=item.get("reason"),
                 )

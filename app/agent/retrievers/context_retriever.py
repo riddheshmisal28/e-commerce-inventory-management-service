@@ -1,13 +1,14 @@
 from app.agent.core.agent_step import AgentStep
 
 from app.agent.context_client import (
-EngineeringContextClient,
+    EngineeringContextClient,
 )
 
 from app.agent.models import (
-AnalysisContext,
-EngineeringContext,
+    AnalysisContext,
+    EngineeringContext,
 )
+
 
 class ContextRetriever(AgentStep):
 
@@ -32,6 +33,10 @@ class ContextRetriever(AgentStep):
 
         context = EngineeringContext()
 
+        keywords = self._get_keywords(
+            ctx,
+        )
+
         # ---------------------------------------------------------
         # Database entities
         # ---------------------------------------------------------
@@ -50,7 +55,8 @@ class ContextRetriever(AgentStep):
 
         if plan.need_endpoints:
 
-            context.endpoints = self.client.get_endpoints()
+            context.endpoints = self.client.get_endpoints(
+            )
 
             context.retrieved_sources.append(
                 "endpoints",
@@ -62,7 +68,8 @@ class ContextRetriever(AgentStep):
 
         if plan.need_models:
 
-            context.models = self.client.get_models()
+            context.models = self.client.get_models(
+            )
 
             context.retrieved_sources.append(
                 "models",
@@ -88,7 +95,7 @@ class ContextRetriever(AgentStep):
 
             context.business_logic = (
                 self.client.get_business_logic(
-                    keywords=plan.keywords,
+                    keywords=keywords,
                 )
             )
 
@@ -104,7 +111,7 @@ class ContextRetriever(AgentStep):
 
             context.repositories = (
                 self.client.get_repositories(
-                    keywords=plan.keywords,
+                    keywords=keywords,
                 )
             )
 
@@ -120,7 +127,7 @@ class ContextRetriever(AgentStep):
 
             context.integrations = (
                 self.client.get_integrations(
-                    keywords=plan.keywords,
+                    keywords=keywords,
                 )
             )
 
@@ -136,7 +143,7 @@ class ContextRetriever(AgentStep):
 
             context.documentation = (
                 self.client.get_documentation(
-                    keywords=plan.keywords,
+                    keywords=keywords,
                 )
             )
 
@@ -144,18 +151,127 @@ class ContextRetriever(AgentStep):
                 "documentation",
             )
 
-
         # ---------------------------------------------------------
         # Engineering components
         # ---------------------------------------------------------
 
         if plan.need_components:
 
-            context.components = self.client.get_components(
-                keywords=plan.keywords,
+            context.components = (
+                self.client.get_components(
+                    keywords=keywords,
+                )
             )
 
             context.retrieved_sources.append(
                 "components",
             )
+
+        # ---------------------------------------------------------
+        # Store retrieved engineering context
+        # ---------------------------------------------------------
+
         ctx.engineering_context = context
+
+    @staticmethod
+    def _get_keywords(
+        ctx: AnalysisContext,
+    ) -> list[str]:
+
+        """
+        Return planner-generated keywords.
+
+        If the LLM planner returns no keywords, use a small
+        deterministic fallback based on the requirement.
+
+        This prevents keyword-dependent context retrieval
+        from silently returning no results.
+        """
+
+        plan = ctx.context_plan
+
+        if plan is not None and plan.keywords:
+
+            return list(
+                dict.fromkeys(
+                    keyword.strip().lower()
+                    for keyword in plan.keywords
+                    if keyword and keyword.strip()
+                )
+            )
+
+        return ContextRetriever._fallback_keywords(
+            ctx,
+        )
+
+    @staticmethod
+    def _fallback_keywords(
+        ctx: AnalysisContext,
+    ) -> list[str]:
+
+        """
+        Deterministic fallback keywords.
+
+        This is intentionally conservative. It should provide
+        useful retrieval terms without trying to perform impact
+        analysis.
+        """
+
+        requirement = ctx.requirement
+
+        text_parts = [
+            getattr(requirement, "title", "") or "",
+            getattr(requirement, "description", "") or "",
+        ]
+
+        acceptance_criteria = getattr(
+            requirement,
+            "acceptance_criteria",
+            None,
+        )
+
+        if acceptance_criteria:
+
+            if isinstance(
+                acceptance_criteria,
+                list,
+            ):
+                text_parts.extend(
+                    str(item)
+                    for item in acceptance_criteria
+                )
+
+            else:
+                text_parts.append(
+                    str(acceptance_criteria)
+                )
+
+        text = " ".join(text_parts).lower()
+
+        # Domain-specific terms that are useful for retrieval.
+        #
+        # This is NOT intended to determine impacts.
+        known_terms = [
+            "sku",
+            "stock",
+            "quantity",
+            "threshold",
+            "inventory",
+            "alert",
+            "notification",
+            "product",
+            "order",
+            "inactive",
+            "email",
+            "sms",
+            "event",
+            "scheduler",
+            "worker",
+            "duplicate",
+        ]
+
+        return [
+            keyword
+            for keyword in known_terms
+            if keyword in text
+        ]

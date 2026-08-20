@@ -232,9 +232,9 @@ class BlastRadiusAnalyzer(AgentStep):
         impact,
     ) -> str:
 
-        impact_type = getattr(
+        change_type = getattr(
             impact,
-            "impact_type",
+            "change_type",
             "",
         )
 
@@ -256,10 +256,10 @@ class BlastRadiusAnalyzer(AgentStep):
         ):
             return "High"
 
-        impact_type = impact_type.lower()
+        change_type = change_type.lower()
 
         if any(
-            keyword in impact_type
+            keyword in change_type
             for keyword in (
                 "integration",
                 "external",
@@ -269,7 +269,7 @@ class BlastRadiusAnalyzer(AgentStep):
             return "High"
 
         if any(
-            keyword in impact_type
+            keyword in change_type
             for keyword in (
                 "business",
                 "logic",

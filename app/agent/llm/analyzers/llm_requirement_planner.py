@@ -16,18 +16,19 @@ from app.agent.models import (
     LLMInteraction,
 )
 
+
 class LLMRequirementPlanner:
 
     name = "LLM Requirement Planner"
 
     def __init__(self):
-        self.client = LLMClient()
+        self.client = LLMClient(json_mode=True)
 
         self.prompt_builder = PlannerPromptBuilder()
 
         self.output_parser = StructuredOutputParser()
 
-        # Rule-based fallback used when the LLM planner
+        # Deterministic fallback used when the LLM planner
         # fails or returns an invalid structured response.
         self.fallback_planner = RequirementAnalyzer()
 
@@ -45,7 +46,7 @@ class LLMRequirementPlanner:
                 prompt,
             )
 
-            # Store the LLM interaction for traceability,
+            # Store LLM interaction for traceability,
             # debugging, and analysis.
             ctx.llm_interactions.append(
                 LLMInteraction(
@@ -58,14 +59,18 @@ class LLMRequirementPlanner:
                 )
             )
 
-            # StructuredOutputParser is responsible for:
-            # 1. Parsing the LLM response
-            # 2. Validating it against ContextPlan
-            # 3. Returning a valid ContextPlan instance
-            ctx.context_plan = self.output_parser.parse(
+            # Parse and validate the planner response.
+            context_plan = self.output_parser.parse(
                 llm_response.response,
                 ContextPlan,
             )
+
+            # Normalize planner output before storing it.
+            self._normalize_context_plan(
+                context_plan,
+            )
+
+            ctx.context_plan = context_plan
 
         except Exception as ex:
 
@@ -78,6 +83,36 @@ class LLMRequirementPlanner:
             )
 
             print(
-                f"LLM planning failed. "
-                f"Using rule-based planner.\n{ex}"
+                "LLM planning failed. "
+                "Using rule-based planner.\n"
+                f"{ex}"
             )
+
+    @staticmethod
+    def _normalize_context_plan(
+        context_plan: ContextPlan,
+    ) -> None:
+        """
+        Normalize planner output so downstream context retrieval
+        receives predictable values.
+
+        This method intentionally does not infer additional
+        context types. The LLM planner remains responsible for
+        deciding what context is required.
+        """
+
+        if context_plan.keywords is None:
+            context_plan.keywords = []
+
+        # Normalize keywords:
+        # - lowercase
+        # - trim whitespace
+        # - remove empty values
+        # - remove duplicates
+        context_plan.keywords = list(
+            dict.fromkeys(
+                keyword.strip().lower()
+                for keyword in context_plan.keywords
+                if keyword and keyword.strip()
+            )
+        )

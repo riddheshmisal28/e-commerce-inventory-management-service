@@ -89,23 +89,24 @@ class StructuredOutputParser:
         except json.JSONDecodeError:
 
             # -----------------------------------------------------
-            # Try extracting a JSON object from surrounding text
+            # Find the start of the first JSON object and use
+            # raw_decode so that trailing text (extra prose, a
+            # second JSON block, etc.) after the closing brace
+            # does not cause "Extra data" errors.
             # -----------------------------------------------------
 
-            match = re.search(
-                r"\{.*\}",
-                cleaned,
-                flags=re.DOTALL,
-            )
+            start = cleaned.find("{")
 
-            if not match:
+            if start == -1:
                 raise ValueError(
                     "No JSON object found in LLM response."
                 )
 
             try:
-                json_data = json.loads(
-                    match.group(),
+                decoder = json.JSONDecoder()
+                json_data, _ = decoder.raw_decode(
+                    cleaned,
+                    start,
                 )
 
             except json.JSONDecodeError as exc:
