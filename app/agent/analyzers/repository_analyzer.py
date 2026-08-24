@@ -1,5 +1,4 @@
 from app.agent.core.agent_step import AgentStep
-
 from app.agent.models import (
     AnalysisContext,
     ComponentImpact,
@@ -27,7 +26,9 @@ class RepositoryAnalyzer(AgentStep):
             else []
         )
 
-        for item in ctx.engineering_context.repositories:
+        repositories = ctx.engineering_context.repositories
+
+        for item in repositories:
 
             repository = item.get("repository")
 
@@ -68,7 +69,13 @@ class RepositoryAnalyzer(AgentStep):
             f"{repository} {change}"
         ).lower()
 
-        return any(
-            keyword.lower() in context
+        normalized_keywords = {
+            keyword.strip().lower()
             for keyword in keywords
+            if keyword and keyword.strip()
+        }
+
+        return any(
+            keyword in context
+            for keyword in normalized_keywords
         )

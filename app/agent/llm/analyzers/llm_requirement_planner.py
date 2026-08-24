@@ -78,7 +78,7 @@ class LLMRequirementPlanner:
             # - LLM invocation fails
             # - LLM returns invalid JSON
             # - ContextPlan validation fails
-            ctx.context_plan = self.fallback_planner.analyze(
+            ctx.context_plan = self.fallback_planner.execute(
                 ctx.requirement,
             )
 

@@ -3,6 +3,7 @@ import time
 from app.agent.llm.providers.base_provider import BaseLLMProvider
 from app.agent.llm.providers.ollama_provider import OllamaProvider
 from app.core.logger import get_logger
+from app.agent.llm.constants import planner_model
 
 logger = get_logger(__name__)
 
@@ -12,10 +13,12 @@ class LLMClient:
         self,
         provider: BaseLLMProvider | None = None,
         json_mode: bool = False,
+        model: str = planner_model,
     ):
 
         self.provider = provider or OllamaProvider(
             json_mode=json_mode,
+            model=model
         )
 
     def generate(

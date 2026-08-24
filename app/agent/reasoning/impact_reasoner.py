@@ -11,6 +11,7 @@ from app.agent.models import (
     ImpactReasoningResult,
 )
 from app.core.logger import get_logger
+from app.agent.llm.constants import reasoner_model
 
 
 logger = get_logger(__name__)
@@ -25,7 +26,7 @@ class ImpactReasoner(AgentStep):
     _MAX_ATTEMPTS = 3
 
     def __init__(self):
-        self.client = LLMClient(json_mode=True)
+        self.client = LLMClient(json_mode=True, model=reasoner_model)
         self.output_parser = StructuredOutputParser()
 
     # ==========================================================
