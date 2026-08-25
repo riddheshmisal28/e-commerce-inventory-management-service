@@ -125,6 +125,7 @@ This project includes Model Context Protocol (MCP) server support and an automat
 ### 1. Model Context Protocol (MCP)
 
 By integrating `fastapi-mcp`, the application acts as an MCP server. LLMs and developer agents (e.g., Cursor, Claude Desktop, or custom MCP clients) can automatically interface with the running service.
+
 - The MCP server is mounted at: `http://localhost:8000/mcp`
 
 ### 2. Impact Analysis Agent
@@ -135,14 +136,14 @@ Located in the `app/agent` directory, this is a modular, object-oriented pipelin
 
 The `ImpactAgent` orchestrates a **6-step pipeline** via `PipelineExecutor`. Each step implements the `AgentStep` interface, receives a shared `AnalysisContext`, and updates it in place:
 
-| # | Step | Module | Responsibility |
-|---|------|--------|----------------|
-| 1 | **LLM Requirement Planner** | `llm/analyzers/llm_requirement_planner.py` | Uses an LLM (Ollama) to determine which engineering context types are needed. Falls back to rule-based `RequirementAnalyzer` on failure. |
-| 2 | **Context Retriever** | `retrievers/context_retriever.py` | Queries the running FastAPI app via `context_client.py` to fetch entities, endpoints, models, OpenAPI spec, business logic, repositories, integrations, components, and documentation — driven by the `ContextPlan`. |
-| 3 | **Impact Reasoner** | `reasoning/impact_reasoner.py` | Sends the full engineering context and requirement to the LLM and receives a structured `ImpactReasoningResult` covering all impact categories (entities, endpoints, models, business logic, repositories, integrations, components) in a single grounded LLM call. |
-| 4 | **Impact Validator** | `validators/impact_validator.py` | Cross-references each LLM-produced impact against the real engineering context. Filters out hallucinated entities, non-existent endpoints, invalid field operations, and fabricated components. |
-| 5 | **Blast Radius Analyzer** | `analyzers/blast_radius.py` | Aggregates all validated, layer-specific impacts into a unified, deduplicated blast radius with severity levels. |
-| 6 | **Report Builder** | `builders/report_builder.py` | Assembles all findings into an `ImpactAnalysisReport`. |
+| #   | Step                        | Module                                     | Responsibility                                                                                                                                                                                                                                                      |
+| --- | --------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **LLM Requirement Planner** | `llm/analyzers/llm_requirement_planner.py` | Uses an LLM (Ollama) to determine which engineering context types are needed. Falls back to rule-based `RequirementAnalyzer` on failure.                                                                                                                            |
+| 2   | **Context Retriever**       | `retrievers/context_retriever.py`          | Queries the running FastAPI app via `context_client.py` to fetch entities, endpoints, models, OpenAPI spec, business logic, repositories, integrations, components, and documentation — driven by the `ContextPlan`.                                                |
+| 3   | **Impact Reasoner**         | `reasoning/impact_reasoner.py`             | Sends the full engineering context and requirement to the LLM and receives a structured `ImpactReasoningResult` covering all impact categories (entities, endpoints, models, business logic, repositories, integrations, components) in a single grounded LLM call. |
+| 4   | **Impact Validator**        | `validators/impact_validator.py`           | Cross-references each LLM-produced impact against the real engineering context. Filters out hallucinated entities, non-existent endpoints, invalid field operations, and fabricated components.                                                                     |
+| 5   | **Blast Radius Analyzer**   | `analyzers/blast_radius.py`                | Aggregates all validated, layer-specific impacts into a unified, deduplicated blast radius with severity levels.                                                                                                                                                    |
+| 6   | **Report Builder**          | `builders/report_builder.py`               | Assembles all findings into an `ImpactAnalysisReport`, including LLM-generated clarifications and scenario packs.                                                                                                                                                   |
 
 #### Impact Reasoner
 
@@ -152,6 +153,14 @@ The `ImpactAgent` orchestrates a **6-step pipeline** via `PipelineExecutor`. Eac
 - Enforces **strict grounding rules** in the prompt: the LLM must only reference artifacts that exist in the supplied context and must never invent entities, fields, endpoints, or components.
 - Parses the LLM response into an `ImpactReasoningResult` (via `StructuredOutputParser`) and writes all impact categories directly into the shared `AnalysisContext`.
 - Records the full LLM interaction (prompt, response, provider, model, duration) in `ctx.llm_interactions`.
+
+#### Report Builders and Scenario Generation
+
+The final report also includes LLM-backed builders for clarification questions and scenario generation:
+
+- `clarification_builder.py` sends a prompt to the LLM to generate the highest-value clarification questions for the requirement, then falls back to deterministic rule-based questions if parsing or generation fails.
+- `test_scenario_builder.py` now generates **test scenarios and BDD scenarios in the same structured LLM call**. It returns `happy_path`, `negative_cases`, `edge_cases`, and `bdd_scenarios` together, then normalizes them before storing them in the report.
+- Both builders record their LLM interactions in `ctx.llm_interactions` and keep a graceful rule-based fallback path for offline or invalid LLM responses.
 
 #### Impact Validator
 
@@ -185,6 +194,7 @@ app/agent/llm/
 
 - **LLM-first, rule-based fallback**: The `LLMRequirementPlanner` calls the LLM to produce a `ContextPlan`. If the LLM is unavailable, returns malformed JSON, or fails Pydantic validation, the system automatically falls back to the deterministic `RequirementAnalyzer`.
 - **Single-call LLM reasoning**: `ImpactReasoner` consolidates all impact categories into a single LLM call with a richly structured prompt, replacing the previous per-concern analyzer chain. This reduces latency and gives the LLM holistic context.
+- **Combined scenario generation**: `test_scenario_builder.py` generates both test scenarios and BDD scenarios in one structured LLM call, reducing redundant prompt traffic while preserving explicit fallback behavior.
 - **Post-LLM validation**: `ImpactValidator` acts as a grounding filter after the LLM step, removing any hallucinated or contextually invalid impacts before they propagate to the blast radius or report.
 - **Structured output parsing**: `StructuredOutputParser` strips markdown code fences, extracts JSON, unwraps common LLM response wrappers (`result`, `data`, `response`, `output`), and validates against the target Pydantic model.
 - **Traceability**: Every LLM interaction (prompt, response, provider, model, duration) is recorded in `ctx.llm_interactions` for debugging and analysis.
@@ -192,16 +202,16 @@ app/agent/llm/
 
 #### Key Models
 
-| Model | Purpose |
-|-------|---------|
-| `Requirement` | Input: title, description, acceptance criteria |
-| `ContextPlan` | LLM planner output: which context types to retrieve |
-| `EngineeringContext` | Holds all retrieved context (entities, endpoints, models, etc.) |
-| `ImpactReasoningResult` | Structured LLM output from `ImpactReasoner`: all impact categories |
-| `AnalysisContext` | Shared pipeline state passed between all steps |
-| `ImpactAnalysisReport` | Final output report |
-| `PipelineResult` | Pipeline execution result: success, metrics, report, error |
-| `LLMInteraction` | Recorded LLM call: step, provider, model, prompt, response, duration |
+| Model                   | Purpose                                                              |
+| ----------------------- | -------------------------------------------------------------------- |
+| `Requirement`           | Input: title, description, acceptance criteria                       |
+| `ContextPlan`           | LLM planner output: which context types to retrieve                  |
+| `EngineeringContext`    | Holds all retrieved context (entities, endpoints, models, etc.)      |
+| `ImpactReasoningResult` | Structured LLM output from `ImpactReasoner`: all impact categories   |
+| `AnalysisContext`       | Shared pipeline state passed between all steps                       |
+| `ImpactAnalysisReport`  | Final output report                                                  |
+| `PipelineResult`        | Pipeline execution result: success, metrics, report, error           |
+| `LLMInteraction`        | Recorded LLM call: step, provider, model, prompt, response, duration |
 
 #### Report Contents
 
@@ -231,6 +241,7 @@ The final `ImpactAnalysisReport` includes:
 #### Running the Impact Agent
 
 **Prerequisites:**
+
 1. The FastAPI service must be running on port 8000.
 2. Ollama must be running locally on port 11434 with the `llama3.2:3b` model pulled.
 
@@ -240,12 +251,14 @@ ollama pull llama3.2:3b
 ```
 
 **On PowerShell (Windows):**
+
 ```powershell
 $env:PYTHONPATH="app/agent"
 python app/agent/impact_agent.py
 ```
 
 **On Bash (Linux/macOS):**
+
 ```bash
 PYTHONPATH=app/agent python app/agent/impact_agent.py
 ```
@@ -286,9 +299,9 @@ inventory-management-service/
 │   │   ├── builders/
 │   │   │   ├── report_builder.py       # Final report assembly
 │   │   │   ├── feature_summary_builder.py
-│   │   │   ├── clarification_builder.py
-│   │   │   ├── test_scenario_builder.py
-│   │   │   └── bdd_builder.py
+│   │   │   ├── clarification_builder.py # LLM-first clarification question generation
+│   │   │   ├── test_scenario_builder.py # Test + BDD generation in one structured LLM call
+│   │   │   └── bdd_builder.py         # Rule-based fallback for BDD scenarios
 │   │   ├── retrievers/
 │   │   │   └── context_retriever.py    # Plan-driven engineering context retrieval
 │   │   └── llm/
