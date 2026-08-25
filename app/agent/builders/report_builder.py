@@ -14,11 +14,7 @@ from app.agent.builders.clarification_builder import (
 )
 
 from app.agent.builders.test_scenario_builder import (
-    build_test_scenarios,
-)
-
-from app.agent.builders.bdd_builder import (
-    build_bdd_scenarios,
+    build_test_and_bdd_scenarios,
 )
 
 
@@ -32,6 +28,11 @@ class ReportBuilder(AgentStep):
         self,
         ctx: AnalysisContext,
     ) -> ImpactAnalysisReport:
+
+        test_scenarios, bdd_scenarios = build_test_and_bdd_scenarios(
+            ctx.requirement,
+            ctx=ctx,
+        )
 
         report = ImpactAnalysisReport(
             feature_summary=build_feature_summary(
@@ -64,18 +65,11 @@ class ReportBuilder(AgentStep):
             clarification_questions=(
                 build_clarification_questions(
                     ctx.requirement,
+                    ctx=ctx,
                 )
             ),
-            test_scenarios=(
-                build_test_scenarios(
-                    ctx.requirement,
-                )
-            ),
-            bdd_scenarios=(
-                build_bdd_scenarios(
-                    ctx.requirement,
-                )
-            ),
+            test_scenarios=test_scenarios,
+            bdd_scenarios=bdd_scenarios,
         )
 
         ctx.report = report
