@@ -22,17 +22,13 @@ class SemanticImpactRefiner(AgentStep):
 
     name = "Semantic Impact Refiner"
 
-    required_context: set[str] = {
-        "requirement",
-        "engineering_context",
-        "entity_impacts",
-        "endpoint_impacts",
-        "model_impacts",
-        "business_logic_impacts",
-        "repository_impacts",
-        "integration_impacts",
-        "component_impacts",
-    }
+    # This step depends on the analysis outputs produced by earlier
+    # impact-analysis stages, not on ContextPlan keys. The pipeline gate
+    # expects ContextPlan fields like need_entities / need_endpoints, so
+    # using AnalysisContext attribute names here incorrectly causes it to
+    # skip this step. Leave the gate open so the step can run whenever the
+    # pipeline reaches it.
+    required_context: set[str] = set()
 
     def __init__(self):
         self.client = LLMClient(json_mode=True)
@@ -75,6 +71,12 @@ class SemanticImpactRefiner(AgentStep):
                 prompt=prompt,
                 response=llm_response.response,
                 duration_ms=llm_response.duration_ms,
+                input_tokens=llm_response.input_tokens,
+                output_tokens=llm_response.output_tokens,
+                total_tokens=llm_response.total_tokens,
+                tokens_per_second = (
+                    llm_response.output_tokens / (llm_response.duration_ms / 1000)
+                )
             )
         )
 

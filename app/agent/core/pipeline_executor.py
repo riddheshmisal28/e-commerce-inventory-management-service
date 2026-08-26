@@ -6,12 +6,20 @@ from app.agent.models import (
     PipelineResult,
 )
 from app.core.logger import get_logger
+from app.agent.observability.agent_run_tracker import AgentRunTracker
 
 
 logger = get_logger(__name__)
 
 
 class PipelineExecutor:
+
+    def __init__(
+        self,
+        run_tracker: AgentRunTracker | None = None,
+    ):
+        self.run_tracker = run_tracker or AgentRunTracker()
+        self.agent_run = None
 
     def run(
         self,
@@ -21,6 +29,14 @@ class PipelineExecutor:
 
         total_start = time.perf_counter()
 
+        self.agent_run = self.run_tracker.start_run(
+            metadata={
+                "requirement_title": ctx.requirement.title,
+                "pipeline_steps": [step.name for step in pipeline],
+            },
+        )
+        ctx.metadata["agent_run"] = self.agent_run
+
         self.before_pipeline(ctx)
 
         for step in pipeline:
@@ -29,6 +45,13 @@ class PipelineExecutor:
                 step,
                 ctx,
             ):
+                step_trace = self.run_tracker.start_step(
+                    step.name,
+                )
+                self.run_tracker.end_step(
+                    step_trace,
+                    status="skipped",
+                )
                 self.on_step_skipped(
                     step,
                     ctx,
@@ -40,6 +63,10 @@ class PipelineExecutor:
             self.before_step(
                 step,
                 ctx,
+            )
+
+            step_trace = self.run_tracker.start_step(
+                step.name,
             )
 
             try:
@@ -65,6 +92,10 @@ class PipelineExecutor:
                     elapsed,
                 )
 
+                self.run_tracker.end_step(
+                    step_trace,
+                )
+
             except Exception as exc:
 
                 elapsed = (
@@ -82,6 +113,18 @@ class PipelineExecutor:
                     elapsed,
                 )
 
+                self.run_tracker.end_step(
+                    step_trace,
+                    status="failed",
+                    error=str(exc),
+                )
+
+                self.agent_run = self.run_tracker.end_run(
+                    status="failed",
+                    error=str(exc),
+                )
+                ctx.metadata["agent_run"] = self.agent_run
+
                 total_elapsed = (
                     time.perf_counter()
                     - total_start
@@ -92,6 +135,7 @@ class PipelineExecutor:
                     total_duration_ms=(
                         total_elapsed * 1000
                     ),
+                    agent_run=self.run_tracker.summary(),
                     executed_steps=(
                         ctx.execution_history.copy()
                     ),
@@ -108,6 +152,9 @@ class PipelineExecutor:
 
         self.after_pipeline(ctx)
 
+        self.agent_run = self.run_tracker.end_run()
+        ctx.metadata["agent_run"] = self.agent_run
+
         total_elapsed = (
             time.perf_counter()
             - total_start
@@ -118,6 +165,7 @@ class PipelineExecutor:
             total_duration_ms=(
                 total_elapsed * 1000
             ),
+            agent_run=self.run_tracker.summary(),
             executed_steps=(
                 ctx.execution_history.copy()
             ),

@@ -94,6 +94,12 @@ class LLMTestScenarioBuilder:
                         prompt=prompt,
                         response=llm_response.response,
                         duration_ms=llm_response.duration_ms,
+                        input_tokens=llm_response.input_tokens,
+                        output_tokens=llm_response.output_tokens,
+                        total_tokens=llm_response.total_tokens,
+                        tokens_per_second = (
+                            llm_response.output_tokens / (llm_response.duration_ms / 1000)
+                        )
                     )
                 )
 
@@ -125,6 +131,7 @@ class LLMTestScenarioBuilder:
                         prompt=prompt,
                         response=str(exc),
                         duration_ms=0.0,
+                        success=False,
                     )
                 )
             return fallback_scenarios, fallback_bdd

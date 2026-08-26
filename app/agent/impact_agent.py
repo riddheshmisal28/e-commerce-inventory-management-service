@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -93,5 +94,8 @@ if __name__ == "__main__":
     )
 
     print(
-        result.model_dump()
+        json.dumps(
+            result.agent_run,
+            indent=2,
+        )
     )

@@ -29,6 +29,9 @@ class OllamaProvider(BaseLLMProvider):
         self.temperature = temperature
         self.think = think
         self.num_predict = num_predict
+        self.last_input_tokens: int | None = None
+        self.last_output_tokens: int | None = None
+        self.last_total_tokens: int | None = None
 
     def generate(
         self,
@@ -36,6 +39,9 @@ class OllamaProvider(BaseLLMProvider):
     ) -> str:
         logger.info("Sending prompt to Ollama...")
         logger.info("Prompt: %s", prompt)
+        self.last_input_tokens = None
+        self.last_output_tokens = None
+        self.last_total_tokens = None
         payload: dict = {
             "model": self.model,
             "prompt": prompt,
@@ -59,6 +65,27 @@ class OllamaProvider(BaseLLMProvider):
         response.raise_for_status()
 
         data = response.json()
+
+        self.last_input_tokens = data.get("prompt_eval_count")
+        self.last_output_tokens = data.get("eval_count")
+        if (
+            self.last_input_tokens is not None
+            and self.last_output_tokens is not None
+        ):
+            self.last_total_tokens = (
+                self.last_input_tokens
+                + self.last_output_tokens
+            )
+
+        logger.info(
+            "Ollama usage metadata",
+            extra={
+                "model": self.model,
+                "prompt_eval_count": self.last_input_tokens,
+                "eval_count": self.last_output_tokens,
+                "total_tokens": self.last_total_tokens,
+            },
+        )
 
         logger.info("Response: %s", data["response"])
         print(data["response"])

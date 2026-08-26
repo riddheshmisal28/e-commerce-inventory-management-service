@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 class FeatureSummary(BaseModel):
     name: str
@@ -228,6 +228,7 @@ class AnalysisContext(BaseModel):
 class PipelineResult(BaseModel):
     success: bool
     total_duration_ms: float
+    agent_run: dict[str, Any] | None = None
     executed_steps: list[str] = Field(
         default_factory=list,
     )
@@ -244,15 +245,39 @@ class LLMInteraction(BaseModel):
     prompt: str
     response: str
     duration_ms: float
+    prompt_chars: int = 0
+    response_chars: int = 0
+    success: bool = True
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+    tokens_per_second: float | None = None
     timestamp: datetime = Field(
         default_factory=datetime.utcnow,
     )
+
+    @model_validator(mode="after")
+    def populate_character_counts(self):
+        self.prompt_chars = len(self.prompt)
+        self.response_chars = len(self.response)
+        if self.output_tokens is not None and self.duration_ms > 0:
+            self.tokens_per_second = (
+                self.output_tokens / (self.duration_ms / 1000)
+            )
+        return self
 
 class LLMResponse(BaseModel):
     provider: str
     model: str
     response: str
     duration_ms: float
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+    tokens_per_second: float | None = None
+    timestamp: datetime = Field(
+        default_factory=datetime.utcnow,
+    )
 
 class ImpactReasoningResult(BaseModel):
     data_model_impacts: list[DataModelImpact] = Field(
@@ -278,9 +303,9 @@ class ImpactReasoningResult(BaseModel):
     )
 
 class SemanticImpactDecision(BaseModel):
-    category: str
-    artifact: str
-    change_type: str
+    category: str | None = None
+    artifact: str | None = None
+    change_type: str | None = None
     keep: bool
     relevance_score: float
     confidence: float
