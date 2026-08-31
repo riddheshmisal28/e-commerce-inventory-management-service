@@ -4,6 +4,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi_mcp import FastApiMCP
 
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.agent.api import router as agent_router
 from app.engineering.api import router as engineering_router
 from app.product.api import router as product_router
 from app.category.api import router as category_router
@@ -48,6 +51,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan
     )
 
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     @app.exception_handler(ProductException)
     async def product_exception_handler(request: Request, exc: ProductException):
         logger.error("ProductException occurred", extra={"error_message": exc.message, "status_code": exc.status_code})
@@ -60,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(product_router)
     app.include_router(sku_router)
     app.include_router(engineering_router)
+    app.include_router(agent_router)
 
     mcp = FastApiMCP(
         app

@@ -72,17 +72,15 @@ class LLMClarificationBuilder:
                 ctx.llm_interactions.append(
                     LLMInteraction(
                         step=self.name,
-                        provider=llm_response.provider,
-                        model=llm_response.model,
+                        provider=getattr(llm_response, "provider", "ollama"),
+                        model=getattr(llm_response, "model", ""),
                         prompt=prompt,
-                        response=llm_response.response,
-                        duration_ms=llm_response.duration_ms,
-                        input_tokens=llm_response.input_tokens,
-                        output_tokens=llm_response.output_tokens,
-                        total_tokens=llm_response.total_tokens,
-                        tokens_per_second = (
-                            llm_response.output_tokens / (llm_response.duration_ms / 1000)
-                        )
+                        response=getattr(llm_response, "response", ""),
+                        duration_ms=getattr(llm_response, "duration_ms", 0.0),
+                        input_tokens=getattr(llm_response, "input_tokens", None),
+                        output_tokens=getattr(llm_response, "output_tokens", None),
+                        total_tokens=getattr(llm_response, "total_tokens", None),
+                        tokens_per_second=getattr(llm_response, "tokens_per_second", None),
                     )
                 )
 

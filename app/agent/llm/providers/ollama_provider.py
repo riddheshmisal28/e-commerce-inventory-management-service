@@ -1,3 +1,4 @@
+import os
 import requests
 
 from app.core.logger import get_logger
@@ -14,7 +15,7 @@ class OllamaProvider(BaseLLMProvider):
     def __init__(
         self,
         model: str = planner_model,
-        base_url: str = "http://localhost:11434",
+        base_url: str | None = None,
         timeout: int = 600,
         json_mode: bool = False,
         temperature: float = 0,
@@ -23,7 +24,13 @@ class OllamaProvider(BaseLLMProvider):
     ):
 
         self.model = model
-        self.base_url = base_url.rstrip("/")
+        resolved_url = (
+            base_url
+            or os.getenv("OLLAMA_BASE_URL")
+            or os.getenv("OLLAMA_URL")
+            or "http://localhost:11434"
+        )
+        self.base_url = resolved_url.rstrip("/")
         self.timeout = timeout
         self.json_mode = json_mode
         self.temperature = temperature
@@ -88,6 +95,6 @@ class OllamaProvider(BaseLLMProvider):
         )
 
         logger.info("Response: %s", data["response"])
-        print(data["response"])
+        # print(data["response"])
 
         return data["response"]

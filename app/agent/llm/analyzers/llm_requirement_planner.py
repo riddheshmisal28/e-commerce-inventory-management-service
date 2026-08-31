@@ -1,6 +1,7 @@
 from app.agent.analyzers.requirement_analyzer import (
     RequirementAnalyzer,
 )
+from app.agent.core.agent_step import AgentStep
 
 from app.agent.llm.client import LLMClient
 from app.agent.llm.prompts.planner_prompt import (
@@ -17,11 +18,13 @@ from app.agent.models import (
 )
 
 
-class LLMRequirementPlanner:
+class LLMRequirementPlanner(AgentStep):
 
     name = "LLM Requirement Planner"
+    required_context: set[str] = set()
 
     def __init__(self):
+        super().__init__()
         self.client = LLMClient(json_mode=True)
 
         self.prompt_builder = PlannerPromptBuilder()
@@ -51,17 +54,15 @@ class LLMRequirementPlanner:
             ctx.llm_interactions.append(
                 LLMInteraction(
                     step=self.name,
-                    provider=llm_response.provider,
-                    model=llm_response.model,
+                    provider=getattr(llm_response, "provider", "ollama"),
+                    model=getattr(llm_response, "model", ""),
                     prompt=prompt,
-                    response=llm_response.response,
-                    duration_ms=llm_response.duration_ms,
-                    input_tokens=llm_response.input_tokens,
-                    output_tokens=llm_response.output_tokens,
-                    total_tokens=llm_response.total_tokens,
-                    tokens_per_second = (
-                        llm_response.output_tokens / (llm_response.duration_ms / 1000)
-                    )
+                    response=getattr(llm_response, "response", ""),
+                    duration_ms=getattr(llm_response, "duration_ms", 0.0),
+                    input_tokens=getattr(llm_response, "input_tokens", None),
+                    output_tokens=getattr(llm_response, "output_tokens", None),
+                    total_tokens=getattr(llm_response, "total_tokens", None),
+                    tokens_per_second=getattr(llm_response, "tokens_per_second", None),
                 )
             )
 
@@ -85,14 +86,14 @@ class LLMRequirementPlanner:
             # - LLM returns invalid JSON
             # - ContextPlan validation fails
             ctx.context_plan = self.fallback_planner.execute(
-                ctx.requirement,
+                ctx,
             )
 
-            print(
-                "LLM planning failed. "
-                "Using rule-based planner.\n"
-                f"{ex}"
-            )
+            # print(
+            #     "LLM planning failed. "
+            #     "Using rule-based planner.\n"
+            #     f"{ex}"
+            # )
 
     @staticmethod
     def _normalize_context_plan(

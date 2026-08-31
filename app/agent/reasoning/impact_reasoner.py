@@ -40,60 +40,51 @@ class ImpactReasoner(AgentStep):
 
         prompt = self._build_prompt(ctx)
 
-        last_exc: Exception | None = None
-
-        for attempt in range(1, self._MAX_ATTEMPTS + 1):
-
-            llm_response = self.client.generate(prompt)
-
-            ctx.llm_interactions.append(
-                LLMInteraction(
-                    step=self.name,
-                    provider=llm_response.provider,
-                    model=llm_response.model,
-                    prompt=prompt,
-                    response=llm_response.response,
-                    duration_ms=llm_response.duration_ms,
-                    input_tokens=llm_response.input_tokens,
-                    output_tokens=llm_response.output_tokens,
-                    total_tokens=llm_response.total_tokens,
-                    tokens_per_second = (
-                        llm_response.output_tokens / (llm_response.duration_ms / 1000)
-                    )
-                )
+        try:
+            llm_response = self.client.generate_with_retry(
+                prompt,
+                max_attempts=self._MAX_ATTEMPTS,
             )
+        except Exception as exc:  # pragma: no cover - exercised via retry path
+            raise ValueError(
+                f"Impact Reasoner failed after {self._MAX_ATTEMPTS} attempts. "
+                f"Last error: {exc}"
+            ) from exc
 
-            try:
+        ctx.llm_interactions.append(
+            LLMInteraction(
+                step=self.name,
+                provider=llm_response.provider,
+                model=llm_response.model,
+                prompt=prompt,
+                response=llm_response.response,
+                duration_ms=llm_response.duration_ms,
+                input_tokens=llm_response.input_tokens,
+                output_tokens=llm_response.output_tokens,
+                total_tokens=llm_response.total_tokens,
+                tokens_per_second=(
+                    llm_response.output_tokens / (llm_response.duration_ms / 1000)
+                    if llm_response.output_tokens is not None and llm_response.duration_ms > 0
+                    else None
+                ),
+            )
+        )
 
-                result = self.output_parser.parse(
-                    llm_response.response,
-                    ImpactReasoningResult,
-                )
+        try:
+            result = self.output_parser.parse(
+                llm_response.response,
+                ImpactReasoningResult,
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "Impact Reasoner failed to parse LLM response after retrying. "
+                f"Last error: {exc}"
+            ) from exc
 
-                self._apply_grounded_impacts(
-                    ctx,
-                    result,
-                )
-
-                return
-
-            except ValueError as exc:
-
-                last_exc = exc
-
-                logger.warning(
-                    "Impact Reasoner attempt %d/%d failed "
-                    "to parse LLM response: %s",
-                    attempt,
-                    self._MAX_ATTEMPTS,
-                    exc,
-                )
-
-        raise ValueError(
-            f"Impact Reasoner failed after "
-            f"{self._MAX_ATTEMPTS} attempts. "
-            f"Last error: {last_exc}"
-        ) from last_exc
+        self._apply_grounded_impacts(
+            ctx,
+            result,
+        )
 
     # ==========================================================
     # PROMPT
@@ -491,6 +482,9 @@ entity
 change_type
 change
 reason
+relevance_score
+confidence
+relevance
 evidence
 
 API:
@@ -500,6 +494,9 @@ endpoint
 change_type
 details
 reason
+relevance_score
+confidence
+relevance
 evidence
 
 Models:
@@ -509,6 +506,9 @@ model
 change_type
 change
 reason
+relevance_score
+confidence
+relevance
 evidence
 
 Business logic:
@@ -518,6 +518,9 @@ component
 change_type
 change
 reason
+relevance_score
+confidence
+relevance
 evidence
 
 Repositories:
@@ -527,6 +530,9 @@ component
 change_type
 change
 reason
+relevance_score
+confidence
+relevance
 evidence
 
 Integrations:
@@ -536,6 +542,9 @@ component
 change_type
 change
 reason
+relevance_score
+confidence
+relevance
 evidence
 
 Components:
@@ -545,6 +554,9 @@ component
 change_type
 change
 reason
+relevance_score
+confidence
+relevance
 evidence
 
 ==========================================================
@@ -565,7 +577,7 @@ Return ONLY JSON.
 """
 
     # ==========================================================
-    # APPLY GROUNDED IMPACTS
+    # APPLY IMPACTS
     # ==========================================================
 
     def _apply_grounded_impacts(
@@ -573,457 +585,35 @@ Return ONLY JSON.
         ctx: AnalysisContext,
         result: ImpactReasoningResult,
     ) -> None:
-
-        ctx.entity_impacts = self._filter_entity_impacts(
-            ctx,
-            result.data_model_impacts,
-        )
-
-        ctx.endpoint_impacts = self._filter_endpoint_impacts(
-            ctx,
-            result.api_interface_mutations,
-        )
-
-        ctx.model_impacts = self._filter_model_impacts(
-            ctx,
-            result.model_impacts,
-        )
-
-        ctx.business_logic_impacts = self._filter_component_impacts(
-            ctx,
-            result.business_logic_impacts,
-            category="business_logic",
-        )
-
-        ctx.repository_impacts = self._filter_component_impacts(
-            ctx,
-            result.repository_impacts,
-            category="repository",
-        )
-
-        ctx.integration_impacts = self._filter_component_impacts(
-            ctx,
-            result.integration_impacts,
-            category="integration",
-        )
-
-        ctx.component_impacts = self._filter_component_impacts(
-            ctx,
-            result.component_impacts,
-            category="component",
-        )
-
-        self._log_grounding_summary(ctx)
-
-    # ==========================================================
-    # ENTITY
-    # ==========================================================
-
-    def _filter_entity_impacts(
-        self,
-        ctx: AnalysisContext,
-        impacts: list[DataModelImpact],
-    ) -> list[DataModelImpact]:
-
-        known = self._build_known_identifiers(
-            ctx.engineering_context.entities,
-            self._entity_identifier,
-        )
-
-        logger.debug(
-            "Known database entities: %s",
-            sorted(known),
-        )
-
-        result = []
-
-        for impact in impacts:
-
-            identifier = self._normalize_identifier(
-                impact.entity
-            )
-
-            if identifier not in known:
-
-                logger.warning(
-                    "Rejecting ungrounded entity impact: %s. "
-                    "Known entities: %s",
-                    impact.entity,
-                    sorted(known),
-                )
-
-                continue
-
-            result.append(impact)
-
-        return result
-
-    # ==========================================================
-    # ENDPOINT
-    # ==========================================================
-
-    def _filter_endpoint_impacts(
-        self,
-        ctx: AnalysisContext,
-        impacts: list[ApiMutation],
-    ) -> list[ApiMutation]:
-
-        known = self._build_known_identifiers(
-            ctx.engineering_context.endpoints,
-            self._endpoint_identifier,
-        )
-
-        logger.debug(
-            "Known endpoints: %s",
-            sorted(known),
-        )
-
-        result = []
-
-        for impact in impacts:
-
-            identifier = self._normalize_identifier(
-                impact.endpoint
-            )
-
-            if identifier not in known:
-
-                logger.warning(
-                    "Rejecting ungrounded endpoint impact: %s. "
-                    "Known endpoints: %s",
-                    impact.endpoint,
-                    sorted(known),
-                )
-
-                continue
-
-            result.append(impact)
-
-        return result
-
-    # ==========================================================
-    # MODEL
-    # ==========================================================
-
-    def _filter_model_impacts(
-        self,
-        ctx: AnalysisContext,
-        impacts: list[ModelImpact],
-    ) -> list[ModelImpact]:
-
-        known = self._build_known_identifiers(
-            ctx.engineering_context.models,
-            self._model_identifier,
-        )
-
-        logger.debug(
-            "Known models: %s",
-            sorted(known),
-        )
-
-        result = []
-
-        for impact in impacts:
-
-            identifier = self._normalize_identifier(
-                impact.model
-            )
-
-            if identifier not in known:
-
-                logger.warning(
-                    "Rejecting ungrounded model impact: %s. "
-                    "Known models: %s",
-                    impact.model,
-                    sorted(known),
-                )
-
-                continue
-
-            result.append(impact)
-
-        return result
-
-    # ==========================================================
-    # COMPONENT BASED IMPACTS
-    # ==========================================================
-
-    def _filter_component_impacts(
-        self,
-        ctx: AnalysisContext,
-        impacts: list[ComponentImpact],
-        category: str,
-    ) -> list[ComponentImpact]:
-
-        context_items = self._get_context_items(
-            ctx,
-            category,
-        )
-
-        known = self._build_known_identifiers(
-            context_items,
-            self._component_identifier,
-        )
-
-        logger.debug(
-            "Known %s components: %s",
-            category,
-            sorted(known),
-        )
-
-        result = []
-
-        for impact in impacts:
-
-            identifier = self._normalize_identifier(
-                impact.component
-            )
-
-            if identifier not in known:
-
-                logger.warning(
-                    "Rejecting ungrounded %s impact: %s. "
-                    "Known artifacts: %s",
-                    category,
-                    impact.component,
-                    sorted(known),
-                )
-
-                continue
-
-            result.append(impact)
-
-        return result
-
-    # ==========================================================
-    # KNOWN IDENTIFIER BUILDER
-    # ==========================================================
-
-    def _build_known_identifiers(
-        self,
-        items: list,
-        identifier_fn,
-    ) -> set[str]:
-
-        known = set()
-
-        for item in items or []:
-
-            identifier = identifier_fn(item)
-
-            if not identifier:
-                continue
-
-            normalized = self._normalize_identifier(
-                identifier
-            )
-
-            if normalized:
-                known.add(normalized)
-
-        return known
-
-    # ==========================================================
-    # CONTEXT HELPERS
-    # ==========================================================
-
-    def _get_context_items(
-        self,
-        ctx: AnalysisContext,
-        category: str,
-    ) -> list:
-
-        if category == "business_logic":
-            return ctx.engineering_context.business_logic or []
-
-        if category == "repository":
-            return ctx.engineering_context.repositories or []
-
-        if category == "integration":
-            return ctx.engineering_context.integrations or []
-
-        if category == "component":
-            return ctx.engineering_context.components or []
-
-        return []
-
-    # ==========================================================
-    # GENERIC VALUE EXTRACTION
-    # ==========================================================
-
-    def _get_value(
-        self,
-        item,
-        attributes: tuple[str, ...],
-    ) -> str | None:
-
-        if item is None:
-            return None
-
-        # ------------------------------------------------------
-        # Dictionary
-        # ------------------------------------------------------
-
-        if isinstance(item, dict):
-
-            for attribute in attributes:
-
-                value = item.get(attribute)
-
-                if value is not None:
-                    return str(value)
-
-            return None
-
-        # ------------------------------------------------------
-        # Pydantic model
-        # ------------------------------------------------------
-
-        if hasattr(item, "model_dump"):
-
-            try:
-
-                data = item.model_dump()
-
-                for attribute in attributes:
-
-                    value = data.get(attribute)
-
-                    if value is not None:
-                        return str(value)
-
-            except Exception:
-                pass
-
-        # ------------------------------------------------------
-        # Normal Python object
-        # ------------------------------------------------------
-
-        for attribute in attributes:
-
-            value = getattr(
-                item,
-                attribute,
-                None,
-            )
-
-            if value is not None:
-                return str(value)
-
-        return None
-
-    # ==========================================================
-    # IDENTIFIERS
-    # ==========================================================
-
-    def _entity_identifier(
-        self,
-        entity,
-    ) -> str:
-
-        value = self._get_value(
-            entity,
-            (
-                "name",
-                "entity",
-                "table",
-                "table_name",
-                "entity_name",
-            ),
-        )
-
-        return value or ""
-
-    def _endpoint_identifier(
-        self,
-        endpoint,
-    ) -> str:
-
-        value = self._get_value(
-            endpoint,
-            (
-                "path",
-                "endpoint",
-                "route",
-                "url",
-                "name",
-            ),
-        )
-
-        return value or ""
-
-    def _model_identifier(
-        self,
-        model,
-    ) -> str:
-
-        value = self._get_value(
-            model,
-            (
-                "name",
-                "model",
-                "model_name",
-            ),
-        )
-
-        return value or ""
-
-    def _component_identifier(
-        self,
-        component,
-    ) -> str:
-
-        value = self._get_value(
-            component,
-            (
-                "name",
-                "component",
-                "class_name",
-                "function",
-                "function_name",
-                "service",
-                "repository",
-                "integration",
-            ),
-        )
-
-        return value or ""
-
-    # ==========================================================
-    # NORMALIZATION
-    # ==========================================================
-
-    def _normalize_identifier(
-        self,
-        value,
-    ) -> str:
-
-        if value is None:
-            return ""
-
-        value = str(value).strip()
-
-        # Remove accidental surrounding quotes.
-        value = value.strip("\"'")
-
-        # Normalize whitespace.
-        value = " ".join(
-            value.split()
-        )
-
-        return value.lower()
+        """
+        Assign LLM-generated impacts to the context without filtering.
+        
+        Grounding validation is delegated to GroundingValidator and ImpactValidator,
+        which own authoritative artifact existence and change validation.
+        This layer focuses on basic name-based exclusion only if needed by LLM.
+        """
+
+        ctx.entity_impacts = result.data_model_impacts or []
+        ctx.endpoint_impacts = result.api_interface_mutations or []
+        ctx.model_impacts = result.model_impacts or []
+        ctx.business_logic_impacts = result.business_logic_impacts or []
+        ctx.repository_impacts = result.repository_impacts or []
+        ctx.integration_impacts = result.integration_impacts or []
+        ctx.component_impacts = result.component_impacts or []
+
+        self._log_impact_summary(ctx)
 
     # ==========================================================
     # DEBUGGING
     # ==========================================================
 
-    def _log_grounding_summary(
+    def _log_impact_summary(
         self,
         ctx: AnalysisContext,
     ) -> None:
 
         logger.info(
-            "Grounded impact summary: "
+            "Impact assignment summary: "
             "entities=%d, endpoints=%d, models=%d, "
             "business_logic=%d, repositories=%d, "
             "integrations=%d, components=%d",

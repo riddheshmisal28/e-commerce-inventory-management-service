@@ -1,3 +1,4 @@
+from app.agent.core.agent_step import AgentStep
 from app.agent.execution.execution_context import ExecutionContext
 from app.agent.execution.execution_decision import ExecutionDecision
 from app.agent.execution.execution_policy import ExecutionPolicy
@@ -12,13 +13,22 @@ class DecisionGate:
 
     def decide(
         self,
-        step_name: str,
+        step: AgentStep | str,
         ctx: AnalysisContext,
     ) -> ExecutionDecision | None:
-        if step_name != "Semantic Impact Refiner":
+        """
+        Evaluate execution decision for a step.
+        
+        If the step is Semantic Impact Refiner or provides an execution policy,
+        evaluate the decision. Otherwise return None.
+        """
+        step_name = step if isinstance(step, str) else getattr(step, "name", str(step))
+
+        if step_name != "Semantic Impact Refiner" and not getattr(step, "execution_policy", None):
             return None
 
-        return self.policy.decide(
+        policy = getattr(step, "execution_policy", None) or self.policy
+        return policy.decide(
             step_name,
             self._evaluate(ctx),
         )

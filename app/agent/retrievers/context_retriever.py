@@ -1,3 +1,6 @@
+import time
+from typing import Optional
+
 from app.agent.core.agent_step import AgentStep
 
 from app.agent.context_client import (
@@ -16,8 +19,14 @@ class ContextRetriever(AgentStep):
 
     required_context: set[str] = set()
 
-    def __init__(self):
+    # TTL-based cache configuration (in seconds)
+    DEFAULT_CACHE_TTL_SECONDS = 300  # 5 minutes
+
+    def __init__(self, cache_ttl_seconds: int = DEFAULT_CACHE_TTL_SECONDS):
         self.client = EngineeringContextClient()
+        self.cache_ttl_seconds = cache_ttl_seconds
+        self._cache: Optional[dict] = None
+        self._cache_timestamp: Optional[float] = None
 
     def execute(
         self,
@@ -30,6 +39,13 @@ class ContextRetriever(AgentStep):
             raise ValueError(
                 "ContextPlan must be generated before retrieving context."
             )
+
+        # Check if cached context is still valid
+        cached_context = self._get_cached_context()
+        if cached_context is not None:
+            ctx.engineering_context = cached_context
+            ctx.engineering_context.retrieved_sources.append("__cached__")
+            return
 
         context = EngineeringContext()
 
@@ -168,10 +184,55 @@ class ContextRetriever(AgentStep):
             )
 
         # ---------------------------------------------------------
+        # Cache the retrieved context
+        # ---------------------------------------------------------
+
+        self._set_cache(context)
+
+        # ---------------------------------------------------------
         # Store retrieved engineering context
         # ---------------------------------------------------------
 
         ctx.engineering_context = context
+
+    def _get_cached_context(self) -> Optional[EngineeringContext]:
+        """
+        Retrieve cached context if it exists and hasn't expired.
+        
+        Returns None if cache is empty or expired.
+        """
+        if self._cache is None or self._cache_timestamp is None:
+            return None
+
+        # Check if cache has expired
+        elapsed = time.time() - self._cache_timestamp
+        if elapsed > self.cache_ttl_seconds:
+            self._cache = None
+            self._cache_timestamp = None
+            return None
+
+        # Return a copy of cached context to avoid external mutations
+        try:
+            return EngineeringContext(**self._cache)
+        except Exception:
+            # If cache is corrupted, clear it
+            self._cache = None
+            self._cache_timestamp = None
+            return None
+
+    def _set_cache(self, context: EngineeringContext) -> None:
+        """
+        Cache the engineering context with current timestamp.
+        """
+        self._cache = context.model_dump() if hasattr(context, "model_dump") else context.__dict__
+        self._cache_timestamp = time.time()
+
+    def invalidate_cache(self) -> None:
+        """
+        Manually invalidate the cache (e.g., on codebase changes).
+        """
+        self._cache = None
+        self._cache_timestamp = None
 
     @staticmethod
     def _get_keywords(

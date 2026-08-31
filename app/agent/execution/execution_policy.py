@@ -30,15 +30,29 @@ class ExecutionPolicy:
     ) -> ExecutionDecision:
         inputs = self._inputs(context)
 
-        if step_name != "Semantic Impact Refiner":
-            return ExecutionDecision(
-                should_execute=True,
-                reason="No execution policy is configured for this step.",
-                confidence=1.0,
-                policy="DEFAULT_EXECUTE",
-                inputs=inputs,
-            )
+        if step_name == "Semantic Impact Refiner":
+            return self._decide_semantic_impact_refiner(inputs, context)
+        
+        if step_name == "Blast Radius Analyzer":
+            return self._decide_blast_radius_analyzer(inputs, context)
+        
+        if step_name == "Report Builder":
+            return self._decide_report_builder(inputs, context)
 
+        return ExecutionDecision(
+            should_execute=True,
+            reason="No execution policy is configured for this step.",
+            confidence=1.0,
+            policy="DEFAULT_EXECUTE",
+            inputs=inputs,
+        )
+
+    def _decide_semantic_impact_refiner(
+        self,
+        inputs: dict[str, object],
+        context: ExecutionContext,
+    ) -> ExecutionDecision:
+        """Policy for Semantic Impact Refiner step."""
         if context.impact_count == 0:
             return ExecutionDecision(
                 should_execute=False,
@@ -82,6 +96,52 @@ class ExecutionPolicy:
             reason="Multiple grounded impacts require semantic relevance filtering.",
             confidence=0.7,
             policy="MULTIPLE_IMPACTS",
+            inputs=inputs,
+        )
+
+    def _decide_blast_radius_analyzer(
+        self,
+        inputs: dict[str, object],
+        context: ExecutionContext,
+    ) -> ExecutionDecision:
+        """Policy for Blast Radius Analyzer step."""
+        if context.impact_count == 0:
+            return ExecutionDecision(
+                should_execute=False,
+                reason="Zero impacts remain after refinement; no blast radius to analyze.",
+                confidence=1.0,
+                policy="ZERO_IMPACTS_EARLY_EXIT",
+                inputs=inputs,
+            )
+
+        return ExecutionDecision(
+            should_execute=True,
+            reason="Impacts exist that require blast radius analysis.",
+            confidence=1.0,
+            policy="EXECUTE_ANALYSIS",
+            inputs=inputs,
+        )
+
+    def _decide_report_builder(
+        self,
+        inputs: dict[str, object],
+        context: ExecutionContext,
+    ) -> ExecutionDecision:
+        """Policy for Report Builder step."""
+        if context.impact_count == 0:
+            return ExecutionDecision(
+                should_execute=False,
+                reason="Zero impacts remain; generate empty stub report to avoid processing waste.",
+                confidence=0.95,
+                policy="ZERO_IMPACTS_EMIT_EMPTY_REPORT",
+                inputs=inputs,
+            )
+
+        return ExecutionDecision(
+            should_execute=True,
+            reason="Impacts exist that require full report generation.",
+            confidence=1.0,
+            policy="GENERATE_FULL_REPORT",
             inputs=inputs,
         )
 

@@ -4,6 +4,7 @@ from app.agent.core.agent_step import AgentStep
 from app.agent.llm.client import LLMClient
 from app.agent.llm.structured_output import StructuredOutputParser
 from app.agent.observability.agent_run_tracker import attach_step_metadata
+from app.agent.execution.execution_policy import ExecutionPolicy
 from app.agent.models import (
     AnalysisContext,
     ComponentImpact,
@@ -42,6 +43,7 @@ class SemanticImpactRefiner(AgentStep):
     def __init__(self):
         self.client = LLMClient(json_mode=True)
         self.output_parser = StructuredOutputParser()
+        self.execution_policy = ExecutionPolicy()
 
     def execute(
         self,
@@ -59,7 +61,15 @@ class SemanticImpactRefiner(AgentStep):
 
         if not impacts:
             logger.info(
-                "No candidate impacts available for semantic refinement."
+                "No candidate impacts available for semantic refinement. Skipping step."
+            )
+            attach_step_metadata(
+                {
+                    "step_decision": "SKIP",
+                    "skip_reason": "zero_impacts",
+                    "impacts_before": 0,
+                    "impacts_after": 0,
+                }
             )
             return
 
@@ -68,7 +78,7 @@ class SemanticImpactRefiner(AgentStep):
             impacts,
         )
 
-        llm_response = self.client.generate(
+        llm_response = self.client.generate_with_retry(
             prompt,
         )
 
@@ -140,6 +150,9 @@ class SemanticImpactRefiner(AgentStep):
             impacts,
             result,
         )
+
+        # Persist refinement decisions for traceability
+        ctx.refinement_decisions = result.decisions
 
         self._log_final_counts(ctx)
 
@@ -384,8 +397,7 @@ Keep a candidate when the requirement either:
 - makes the proposed change a necessary semantic consequence
   of the required business behavior.
 
-A necessary semantic consequence is different from a merely
-possible implementation choice.
+A necessary semantic consequence is different from a merely a plausible implementation choice, and a merely plausible implementation choice must be rejected even when it seems reasonable.
 
 Use the following distinction:
 

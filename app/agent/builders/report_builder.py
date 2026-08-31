@@ -1,5 +1,5 @@
 from app.agent.core.agent_step import AgentStep
-
+from app.agent.execution.execution_policy import ExecutionPolicy
 from app.agent.models import (
     AnalysisContext,
     ImpactAnalysisReport,
@@ -23,6 +23,9 @@ class ReportBuilder(AgentStep):
     name = "Report Builder"
 
     required_context: set[str] = set()
+
+    def __init__(self):
+        self.execution_policy = ExecutionPolicy()
 
     def execute(
         self,

@@ -214,6 +214,9 @@ class AnalysisContext(BaseModel):
         default_factory=list,
     )
     pipeline_result: "PipelineResult | None" = None
+    refinement_decisions: list["SemanticImpactDecision"] = Field(
+        default_factory=list,
+    )
 
     @property
     def requirement_text(self) -> str:
@@ -237,6 +240,9 @@ class PipelineResult(BaseModel):
     )
     report: ImpactAnalysisReport | None = None
     error: str | None = None
+    quality_summary: dict[str, Any] = Field(
+        default_factory=dict,
+    )
 
 class LLMInteraction(BaseModel):
     step: str

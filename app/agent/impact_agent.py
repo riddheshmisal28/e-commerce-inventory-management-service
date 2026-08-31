@@ -41,8 +41,8 @@ from app.agent.validators.grounding_validator import (
 
 class ImpactAgent:
 
-    def __init__(self):
-        self.executor = PipelineExecutor()
+    def __init__(self, on_event=None):
+        self.executor = PipelineExecutor(on_event=on_event)
 
         self.pipeline = [
             LLMRequirementPlanner(),
@@ -93,9 +93,11 @@ if __name__ == "__main__":
         requirement,
     )
 
-    print(
-        json.dumps(
-            result.agent_run,
-            indent=2,
-        )
-    )
+    print(result.model_dump_json(indent=2))
+
+    # print(
+    #     json.dumps(
+    #         result.agent_run,
+    #         indent=2,
+    #     )
+    # )

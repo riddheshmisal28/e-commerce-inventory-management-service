@@ -41,8 +41,14 @@ class AgentRunTracker:
     def __init__(self):
         self.run: Optional[AgentRunTrace] = None
         self._run_start: Optional[float] = None
-        self._step_start: Optional[float] = None
-        self._step_token: Optional[Token] = None
+        self._step_start: ContextVar[Optional[float]] = ContextVar(
+            f"agent_run_step_start_{id(self)}",
+            default=None,
+        )
+        self._step_token: ContextVar[Optional[Token]] = ContextVar(
+            f"agent_run_step_token_{id(self)}",
+            default=None,
+        )
 
     def start_run(
         self,
@@ -75,8 +81,8 @@ class AgentRunTracker:
         )
 
         self.run.steps.append(step)
-        self._step_start = time.perf_counter()
-        self._step_token = _current_step.set(step)
+        self._step_start.set(time.perf_counter())
+        self._step_token.set(_current_step.set(step))
 
         return step
 
@@ -87,12 +93,13 @@ class AgentRunTracker:
         error: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        if self._step_start is None:
+        step_start = self._step_start.get()
+        if step_start is None:
             return
 
         step.ended_at = datetime.now(timezone.utc)
         step.duration_ms = (
-            time.perf_counter() - self._step_start
+            time.perf_counter() - step_start
         ) * 1000
 
         step.status = status
@@ -101,11 +108,12 @@ class AgentRunTracker:
         if metadata:
             step.metadata.update(metadata)
 
-        if self._step_token is not None:
-            _current_step.reset(self._step_token)
-            self._step_token = None
+        step_token = self._step_token.get()
+        if step_token is not None:
+            _current_step.reset(step_token)
+            self._step_token.set(None)
 
-        self._step_start = None
+        self._step_start.set(None)
 
     def end_run(
         self,
@@ -134,10 +142,14 @@ class AgentRunTracker:
         return {
             "run_id": self.run.run_id,
             "status": self.run.status,
+            "started_at": self.run.started_at.isoformat() if self.run.started_at else None,
+            "ended_at": self.run.ended_at.isoformat() if self.run.ended_at else None,
             "total_duration_ms": self.run.total_duration_ms,
             "steps": [
                 {
                     "step_name": step.step_name,
+                    "started_at": step.started_at.isoformat() if step.started_at else None,
+                    "ended_at": step.ended_at.isoformat() if step.ended_at else None,
                     "duration_ms": step.duration_ms,
                     "status": step.status,
                     "metrics": step.metadata,

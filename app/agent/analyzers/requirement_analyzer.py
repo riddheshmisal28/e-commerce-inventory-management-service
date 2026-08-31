@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from app.agent.core.agent_step import AgentStep
-from app.agent.models import AnalysisContext, ContextPlan
+from app.agent.models import AnalysisContext, ContextPlan, Requirement
 
 PLANNING_RULES = [
 {
@@ -104,10 +106,16 @@ class RequirementAnalyzer(AgentStep):
 
     def execute(
         self,
-        ctx: AnalysisContext,
-    ) -> None:
+        ctx: AnalysisContext | Requirement,
+    ) -> ContextPlan:
 
-        text = ctx.requirement_text.lower()
+        if hasattr(ctx, "requirement_text"):
+            text = ctx.requirement_text.lower()
+        elif hasattr(ctx, "title"):
+            criteria_str = " ".join(getattr(ctx, "acceptance_criteria", []) or [])
+            text = f"{getattr(ctx, 'title', '')} {getattr(ctx, 'description', '')} {criteria_str}".lower()
+        else:
+            text = str(ctx).lower()
 
         plan = ContextPlan()
 
@@ -122,7 +130,10 @@ class RequirementAnalyzer(AgentStep):
             dict.fromkeys(plan.keywords)
         )
 
-        ctx.context_plan = plan
+        if isinstance(ctx, AnalysisContext):
+            ctx.context_plan = plan
+
+        return plan
 
     def _apply_rule(
         self,
