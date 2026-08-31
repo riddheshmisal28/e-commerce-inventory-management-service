@@ -26,6 +26,17 @@ def attach_llm_trace(trace: LLMTrace) -> bool:
     return True
 
 
+def attach_step_metadata(
+    metadata: Dict[str, Any],
+) -> bool:
+    step = _current_step.get()
+    if step is None:
+        return False
+
+    step.metadata.update(metadata)
+    return True
+
+
 class AgentRunTracker:
     def __init__(self):
         self.run: Optional[AgentRunTrace] = None
@@ -129,6 +140,7 @@ class AgentRunTracker:
                     "step_name": step.step_name,
                     "duration_ms": step.duration_ms,
                     "status": step.status,
+                    "metrics": step.metadata,
                     "llm_calls": [
                         {
                             "provider": llm_call.provider,

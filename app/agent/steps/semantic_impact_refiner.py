@@ -3,6 +3,7 @@ import logging
 from app.agent.core.agent_step import AgentStep
 from app.agent.llm.client import LLMClient
 from app.agent.llm.structured_output import StructuredOutputParser
+from app.agent.observability.agent_run_tracker import attach_step_metadata
 from app.agent.models import (
     AnalysisContext,
     ComponentImpact,
@@ -16,6 +17,14 @@ from app.agent.models import (
 
 
 logger = logging.getLogger(__name__)
+
+SUPPORT_LEVELS = {
+    "DIRECT",
+    "STRONGLY_IMPLIED",
+    "WEAKLY_SUPPORTED",
+    "SPECULATIVE",
+    "UNSPECIFIED",
+}
 
 
 class SemanticImpactRefiner(AgentStep):
@@ -98,6 +107,15 @@ class SemanticImpactRefiner(AgentStep):
             result,
         )
 
+        refinement_quality = self._summarize_refinement(
+            result.decisions,
+        )
+        attach_step_metadata(
+            {
+                "refinement_quality": refinement_quality,
+            }
+        )
+
         logger.info(
             "Semantic Impact Refiner decisions received",
             extra={
@@ -113,6 +131,7 @@ class SemanticImpactRefiner(AgentStep):
                     for decision in result.decisions
                     if not decision.keep
                 ),
+                "refinement_quality": refinement_quality,
             },
         )
 
@@ -123,6 +142,100 @@ class SemanticImpactRefiner(AgentStep):
         )
 
         self._log_final_counts(ctx)
+
+    @staticmethod
+    def _summarize_refinement(
+        decisions: list[SemanticImpactDecision],
+    ) -> dict[str, float | int]:
+        kept = [
+            decision
+            for decision in decisions
+            if decision.keep
+        ]
+        removed = [
+            decision
+            for decision in decisions
+            if not decision.keep
+        ]
+
+        def average(
+            items: list[SemanticImpactDecision],
+            field: str,
+        ) -> float:
+            if not items:
+                return 0.0
+
+            return sum(
+                getattr(item, field)
+                for item in items
+            ) / len(items)
+
+        return {
+            "impacts_before": len(decisions),
+            "impacts_after": len(kept),
+            "impacts_kept": len(kept),
+            "impacts_removed": len(removed),
+            "keep_rate": (
+                len(kept) / len(decisions)
+                if decisions
+                else 0.0
+            ),
+            "avg_relevance_score": average(
+                decisions,
+                "relevance_score",
+            ),
+            "avg_confidence": average(
+                decisions,
+                "confidence",
+            ),
+            "kept_avg_relevance": average(
+                kept,
+                "relevance_score",
+            ),
+            "kept_avg_confidence": average(
+                kept,
+                "confidence",
+            ),
+            "removed_avg_relevance": average(
+                removed,
+                "relevance_score",
+            ),
+            "removed_avg_confidence": average(
+                removed,
+                "confidence",
+            ),
+            "direct_support_count": sum(
+                decision.support_level == "DIRECT"
+                for decision in decisions
+            ),
+            "strongly_implied_count": sum(
+                decision.support_level == "STRONGLY_IMPLIED"
+                for decision in decisions
+            ),
+            "weakly_supported_count": sum(
+                decision.support_level == "WEAKLY_SUPPORTED"
+                for decision in decisions
+            ),
+            "speculative_count": sum(
+                decision.support_level == "SPECULATIVE"
+                for decision in decisions
+            ),
+            "rejection_by_reason": (
+                SemanticImpactRefiner._rejection_by_reason(removed)
+            ),
+        }
+
+    @staticmethod
+    def _rejection_by_reason(
+        decisions: list[SemanticImpactDecision],
+    ) -> dict[str, int]:
+        counts: dict[str, int] = {}
+
+        for decision in decisions:
+            reason = decision.rejection_reason or "unspecified"
+            counts[reason] = counts.get(reason, 0) + 1
+
+        return counts
 
     # ------------------------------------------------------------------
     # Candidate collection
@@ -250,6 +363,106 @@ Your task is NOT to generate new impacts.
 Your task is to independently determine whether each
 candidate impact is genuinely required by the requirement.
 
+Evaluate every candidate through this chain, in order:
+
+Requirement
+    -> Candidate change
+    -> Artifact
+    -> Change type
+    -> Evidence
+
+==========================================================
+SEMANTIC NECESSITY
+==========================================================
+
+The candidate does NOT need to be stated word-for-word in the
+requirement.
+
+Keep a candidate when the requirement either:
+
+- explicitly requires the proposed change, OR
+- makes the proposed change a necessary semantic consequence
+  of the required business behavior.
+
+A necessary semantic consequence is different from a merely
+possible implementation choice.
+
+Use the following distinction:
+
+EXPLICIT:
+The requirement directly states the behavior or change.
+
+NECESSARY SEMANTIC CONSEQUENCE:
+The requirement does not name the exact artifact or change,
+but the proposed change is necessary to fulfill the required
+business behavior using the supplied engineering context.
+
+PLAUSIBLE IMPLEMENTATION:
+The proposed change is one possible way to implement the
+requirement, but the requirement does not require that
+specific approach.
+
+UNSUPPORTED:
+The candidate has insufficient evidence or no meaningful
+semantic relationship to the requirement.
+
+Keep EXPLICIT and NECESSARY SEMANTIC CONSEQUENCE impacts.
+
+Reject PLAUSIBLE IMPLEMENTATION and UNSUPPORTED impacts.
+
+Do not interpret "not explicitly stated" as automatically
+meaning "speculative".
+
+==========================================================
+VALIDATION CHAIN
+==========================================================
+
+Evaluate each candidate through all of these dimensions:
+
+1. REQUIREMENT ALIGNMENT
+
+Does the requirement explicitly require this impact, or does
+the requirement necessarily imply it?
+
+A candidate may have high requirement alignment even when the
+exact artifact or implementation detail is not explicitly
+named, provided the candidate is a necessary semantic
+consequence of the required behavior.
+
+2. ARTIFACT ALIGNMENT
+
+Does the supplied artifact represent the business concept,
+behavior, or responsibility affected by the requirement?
+
+Artifact existence alone is NOT sufficient.
+
+3. CHANGE ALIGNMENT
+
+Does the proposed change on the artifact logically follow from
+the requirement?
+
+Do not keep an impact merely because the artifact is related
+to the requirement.
+
+4. EVIDENCE STRENGTH
+
+Does the supplied engineering evidence specifically support
+the proposed change on the proposed artifact?
+
+Evidence must support the specific impact, not merely establish
+that the artifact exists or is generally related to the domain.
+
+For example:
+
+"SKUService handles SKU creation and updates"
+
+proves that SKUService exists and handles SKU operations, but
+does NOT by itself prove that SKUService must implement
+low-stock alert logic.
+
+Do not assign high evidence_strength merely because an
+artifact exists or is generally related to the domain.
+
 ==========================================================
 STRICT RULES
 ==========================================================
@@ -278,6 +491,12 @@ STRICT RULES
    - relevance
    - reason
    - evidence
+   - support_level
+   - rejection_reason
+   - requirement_alignment
+   - artifact_alignment
+   - change_alignment
+   - evidence_strength
 
 9. NEVER invent an artifact.
 
@@ -300,68 +519,185 @@ STRICT RULES
 16. Evidence must be specific and grounded in the supplied
     engineering context.
 
+17. Evidence must support the proposed CHANGE on the proposed
+    ARTIFACT, not merely prove that the artifact exists.
+
+18. support_level must be one of:
+
+    DIRECT:
+    The requirement explicitly requires the candidate impact,
+    and the supplied evidence directly supports the specific
+    change on the artifact.
+
+    STRONGLY_IMPLIED:
+    The requirement does not necessarily name the exact impact,
+    but the impact is a necessary semantic consequence or is
+    strongly implied, and the engineering context supports it.
+
+    WEAKLY_SUPPORTED:
+    The impact has some semantic relationship to the requirement,
+    but the proposed change is not clearly necessary or the
+    evidence is incomplete.
+
+    SPECULATIVE:
+    The impact is merely a possible implementation choice,
+    generic architectural assumption, or unsupported inference.
+
+19. Rejected impacts MUST include a non-empty
+    rejection_reason.
+
+20. Kept impacts MUST set rejection_reason to null.
+
+21. Assess requirement_alignment, artifact_alignment,
+    change_alignment, and evidence_strength independently on a
+    0.0 to 1.0 scale BEFORE determining support_level.
+
+22. Do not assign DIRECT from confidence alone.
+
+23. Weak evidence MUST prevent DIRECT support even when
+    confidence is high.
+
+24. A candidate can be semantically relevant even if the
+    requirement does not explicitly name the exact artifact,
+    provided the artifact is a necessary and supported
+    representation of the required business behavior.
+
+25. Do not treat a possible implementation approach as a
+    necessary semantic consequence.
+
+26. Do not reject an impact solely because the requirement
+    does not use the exact terminology used by the artifact,
+    field, or change description.
+
 ==========================================================
 SCORING
 ==========================================================
 
-relevance_score:
+relevance_score answers:
+
+"How strongly does this impact relate to the requirement,
+including necessary semantic consequences?"
+
+Use:
 
 0.90 - 1.00
-Directly required by the requirement.
+The impact is explicitly required by the requirement or is an
+unavoidable semantic consequence of the required behavior.
 
 0.75 - 0.89
-Strongly implied by the requirement and supported by context.
+The impact is strongly implied and is necessary or strongly
+supported by the requirement and engineering context.
 
 0.50 - 0.74
-Potentially relevant but requires some engineering inference.
+The impact is potentially relevant but requires meaningful
+engineering inference. Keep only if the inference represents a
+necessary consequence rather than an optional implementation
+choice.
 
 0.00 - 0.49
-Weak, unrelated, or speculative.
+The impact is weak, unrelated, speculative, or merely one
+possible implementation choice.
 
-confidence:
+confidence answers:
+
+"How strongly does the available engineering evidence support
+the specific proposed impact?"
+
+Use:
 
 0.90 - 1.00
-Strong engineering evidence directly supports the impact.
+The supplied engineering evidence directly supports the
+specific proposed change on the artifact.
 
 0.75 - 0.89
-Good engineering evidence with minor inference.
+The evidence strongly supports the change, with only minor
+inference required.
 
 0.50 - 0.74
-Some evidence exists but the relationship is uncertain.
+Some relevant evidence exists, but the artifact/change
+relationship is uncertain or incomplete.
 
 0.00 - 0.49
-Insufficient or speculative evidence.
+The evidence does not adequately support the proposed change
+or is speculative.
 
 ==========================================================
 IMPORTANT DISTINCTION
 ==========================================================
 
-relevance_score answers:
+relevance_score and confidence are independent.
 
-"How strongly does this impact relate to the requirement?"
+relevance_score measures the relationship between:
 
-confidence answers:
+    Requirement -> Candidate impact
 
-"How strongly does the available engineering evidence
-support this impact?"
+confidence measures the strength of:
 
-These values do not need to be equal.
+    Engineering evidence -> Candidate impact
+
+These values do NOT need to be equal.
+
+Example:
+
+A requirement may clearly require low-stock behavior, giving
+high requirement alignment, while the available engineering
+evidence may only weakly establish which service should own
+that behavior.
+
+In that case:
+
+requirement_alignment = HIGH
+artifact_alignment = HIGH
+change_alignment = HIGH
+evidence_strength = LOW or MEDIUM
+
+Do NOT artificially increase evidence_strength to justify
+keeping an impact.
 
 ==========================================================
 DECISION RULE
 ==========================================================
 
-Keep an impact only when:
+Keep an impact only when BOTH semantic necessity and engineering
+support are sufficient.
 
-relevance_score >= 0.50
+A candidate should be kept when:
+
+1. The requirement explicitly requires the impact OR the impact
+   is a necessary semantic consequence of the requirement.
 
 AND
 
-confidence >= 0.50
+2. The supplied engineering context provides sufficient
+   evidence that the proposed artifact/change is a valid impact.
 
-Otherwise:
+The following MUST be rejected:
+
+- merely plausible implementation choices
+- generic architectural assumptions
+- impacts supported only by keyword similarity
+- impacts where the artifact is related but the proposed
+  change does not follow from the requirement
+- impacts where evidence only proves artifact existence
+- impacts where the requirement-to-change relationship is weak
+
+Numerical scores are secondary consistency checks.
+
+If:
+
+relevance_score < 0.50
+
+OR
+
+confidence < 0.50
+
+then:
 
 keep = false
+
+However, a candidate MUST also be rejected when it is merely
+a plausible implementation choice, even if its numerical scores
+are above 0.50.
 
 ==========================================================
 REQUIREMENT
@@ -387,8 +723,7 @@ CANDIDATE IMPACTS
 
 Each candidate contains an immutable impact_id.
 
-You MUST return exactly one decision for every
-impact_id.
+You MUST return exactly one decision for every impact_id.
 
 {self._format_impacts(impacts)}
 
@@ -409,13 +744,22 @@ Return exactly one JSON object:
             "reason": "semantic explanation",
             "evidence": [
                 "specific supporting engineering evidence"
-            ]
+            ],
+            "support_level": "DIRECT",
+            "rejection_reason": null,
+            "requirement_alignment": 0.0,
+            "artifact_alignment": 0.0,
+            "change_alignment": 0.0,
+            "evidence_strength": 0.0
         }}
     ]
 }}
 
-OUTPUT REQUIREMENTS:
+==========================================================
+OUTPUT REQUIREMENTS
+==========================================================
 
+- Return ONLY the JSON object.
 - Exactly one decision per candidate.
 - Do not omit any candidate.
 - Do not duplicate an impact_id.
@@ -424,10 +768,20 @@ OUTPUT REQUIREMENTS:
 - Do not return category.
 - Do not return artifact.
 - Do not return change_type.
-- The application already owns those fields.
-- Return ONLY the JSON object.
+- Preserve the candidate's semantic identity.
+- support_level must describe the strength of the complete
+  requirement-to-artifact-to-change-to-evidence chain.
+- rejection_reason must explain specifically why a rejected
+  candidate failed that chain.
+- Kept impacts must have rejection_reason = null.
+- Rejected impacts must have a non-empty rejection_reason.
+- requirement_alignment, artifact_alignment,
+  change_alignment, and evidence_strength must each be between
+  0.0 and 1.0.
+- Do not use confidence as a substitute for evidence_strength.
+- Do not treat artifact existence as proof that the artifact
+  requires modification.
 """
-
     # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
@@ -515,6 +869,87 @@ OUTPUT REQUIREMENTS:
                 f"Expected {len(impacts)}, "
                 f"received {len(result.decisions)}."
             )
+
+        for decision in result.decisions:
+            if not 0.0 <= decision.relevance_score <= 1.0:
+                raise ValueError(
+                    f"Invalid relevance_score for impact_id={decision.impact_id}: "
+                    f"{decision.relevance_score}. Expected a value between 0 and 1."
+                )
+
+            if not 0.0 <= decision.confidence <= 1.0:
+                raise ValueError(
+                    f"Invalid confidence for impact_id={decision.impact_id}: "
+                    f"{decision.confidence}. Expected a value between 0 and 1."
+                )
+
+            for field in (
+                "requirement_alignment",
+                "artifact_alignment",
+                "change_alignment",
+                "evidence_strength",
+            ):
+                value = getattr(decision, field)
+                if not 0.0 <= value <= 1.0:
+                    raise ValueError(
+                        f"Invalid {field} for impact_id={decision.impact_id}: "
+                        f"{value}. Expected a value between 0 and 1."
+                    )
+
+            if decision.support_level not in SUPPORT_LEVELS:
+                raise ValueError(
+                    f"Invalid support_level for impact_id={decision.impact_id}: "
+                    f"{decision.support_level}. Expected one of "
+                    f"{sorted(SUPPORT_LEVELS)}."
+                )
+
+            if (
+                decision.support_level == "DIRECT"
+                and min(
+                    decision.requirement_alignment,
+                    decision.artifact_alignment,
+                    decision.change_alignment,
+                    decision.evidence_strength,
+                ) < 0.90
+            ):
+                raise ValueError(
+                    f"support_level DIRECT for impact_id={decision.impact_id} "
+                    "requires all alignment assessments >= 0.90."
+                )
+
+            if not decision.keep and not decision.rejection_reason:
+                raise ValueError(
+                    f"Rejected impact_id={decision.impact_id} must include "
+                    "a rejection_reason."
+                )
+
+            if decision.keep and decision.rejection_reason:
+                raise ValueError(
+                    f"Kept impact_id={decision.impact_id} must not include "
+                    "a rejection_reason."
+                )
+
+    @staticmethod
+    def _support_level_from_alignment(
+        decision: SemanticImpactDecision,
+    ) -> str:
+        scores = (
+            decision.requirement_alignment,
+            decision.artifact_alignment,
+            decision.change_alignment,
+            decision.evidence_strength,
+        )
+
+        if min(scores) >= 0.90:
+            return "DIRECT"
+
+        if min(scores) >= 0.75:
+            return "STRONGLY_IMPLIED"
+
+        if min(scores) >= 0.50:
+            return "WEAKLY_SUPPORTED"
+
+        return "SPECULATIVE"
 
     # ------------------------------------------------------------------
     # Apply result

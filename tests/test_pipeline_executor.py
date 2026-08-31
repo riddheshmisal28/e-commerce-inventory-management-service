@@ -35,6 +35,14 @@ class LLMCallingStep:
         LLMClient(provider=FakeProvider()).generate("prompt text")
 
 
+class ContextGatedStep:
+    name = "Context Gated Step"
+    required_context = {"entities"}
+
+    def execute(self, ctx):
+        ctx.metadata["step_ran"] = True
+
+
 def build_context():
     return AnalysisContext(
         requirement=Requirement(
@@ -61,6 +69,7 @@ def test_pipeline_executor_records_completed_run_and_steps():
             "step_name": "Successful Step",
             "duration_ms": result.agent_run["steps"][0]["duration_ms"],
             "status": "success",
+                "metrics": {},
             "llm_calls": [],
         }
     ]
@@ -104,3 +113,22 @@ def test_llm_client_attaches_trace_to_active_step():
     assert llm_call["input_tokens"] is None
     assert llm_call["output_tokens"] is None
     assert llm_call["total_tokens"] is None
+
+
+def test_pipeline_executor_traces_context_gated_skips():
+    ctx = build_context()
+
+    result = PipelineExecutor().run(
+        [ContextGatedStep()],
+        ctx,
+    )
+
+    step = result.agent_run["steps"][0]
+    assert step["status"] == "skipped"
+    assert step["metrics"]["execution_decision"] == {
+        "should_execute": False,
+        "policy": "CONTEXT_NOT_REQUESTED",
+        "reason": "Required execution context was not requested.",
+        "confidence": 1.0,
+        "inputs": {},
+    }

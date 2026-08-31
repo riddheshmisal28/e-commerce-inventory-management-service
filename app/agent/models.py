@@ -314,6 +314,12 @@ class SemanticImpactDecision(BaseModel):
     evidence: list[str] = Field(
         default_factory=list,
     )
+    requirement_alignment: float = 0.0
+    artifact_alignment: float = 0.0
+    change_alignment: float = 0.0
+    evidence_strength: float = 0.0
+    support_level: str = "UNSPECIFIED"
+    rejection_reason: str | None = None
     impact_id: int | None = None
 
 class SemanticImpactRefinementResult(BaseModel):

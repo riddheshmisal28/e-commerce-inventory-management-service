@@ -1,6 +1,6 @@
 # Inventory Management Service
 
-A FastAPI-based inventory management service with PostgreSQL persistence, Elasticsearch search support, and an agentic/MCP interface for intelligent impact analysis — now powered by LLM-driven planning via Ollama.
+A FastAPI-based inventory management service with PostgreSQL persistence, Elasticsearch search support, and an agentic/MCP interface for intelligent impact analysis — powered by LLM-driven planning, reasoning, validation, semantic refinement, execution policy gating, and end-to-end observability via Ollama.
 
 ## Features
 
@@ -12,7 +12,7 @@ A FastAPI-based inventory management service with PostgreSQL persistence, Elasti
 - **Correlation ID Middleware**: Structured logging and tracing across services.
 - **Model Context Protocol (MCP)**: Dynamic exposure of application tools and schemas to LLMs.
 - **Engineering Context API**: Special metadata endpoints to inspect database tables, models, and routes.
-- **Agentic Impact Analysis**: A 6-step pipeline engine — with LLM-powered reasoning, grounding validation, and rule-based fallback — that processes requirement documents and produces comprehensive impact reports (blast radius, contract mutations, data schemas, BDD test scenarios).
+- **Agentic Impact Analysis**: An 8-step pipeline engine with LLM-powered reasoning, multi-layer grounding validation, semantic impact refinement, deterministic execution gating, and observability tracing that processes requirement documents and produces comprehensive impact reports (blast radius, contract mutations, data schemas, BDD test scenarios).
 
 ## Tech Stack
 
@@ -34,7 +34,7 @@ A FastAPI-based inventory management service with PostgreSQL persistence, Elasti
 - Python 3.11
 - Docker
 - Docker Compose
-- [Ollama](https://ollama.com/) (for LLM-powered requirement planning and impact reasoning)
+- [Ollama](https://ollama.com/) (for LLM-powered requirement planning, impact reasoning, and semantic refinement)
 
 ### Install Dependencies
 
@@ -134,16 +134,38 @@ Located in the `app/agent` directory, this is a modular, object-oriented pipelin
 
 #### Pipeline Architecture & Flow
 
-The `ImpactAgent` orchestrates a **6-step pipeline** via `PipelineExecutor`. Each step implements the `AgentStep` interface, receives a shared `AnalysisContext`, and updates it in place:
+```text
+Requirement
+    ↓
+1. LLM Requirement Planner  (with rule-based fallback)
+    ↓
+2. Context Retriever        (Engineering Context discovery)
+    ↓
+3. Impact Reasoner          (Holistic LLM reasoning + confidence/evidence)
+    ↓
+4. Impact Validator         (Deterministic schema & entity validation)
+    ↓
+5. Grounding Validator      (Strict artifact context verification)
+    ↓
+6. Semantic Impact Refiner  (LLM necessity chain + Execution Policy Gate)
+    ↓
+7. Blast Radius Analyzer    (Aggregation, deduplication & severity)
+    ↓
+8. Report Builder           (Report assembly + scenarios + BDD)
+```
+
+The `ImpactAgent` orchestrates an **8-step pipeline** via `PipelineExecutor`. Each step implements the `AgentStep` interface, receives a shared `AnalysisContext`, and updates it in place:
 
 | #   | Step                        | Module                                     | Responsibility                                                                                                                                                                                                                                                      |
 | --- | --------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | **LLM Requirement Planner** | `llm/analyzers/llm_requirement_planner.py` | Uses an LLM (Ollama) to determine which engineering context types are needed. Falls back to rule-based `RequirementAnalyzer` on failure.                                                                                                                            |
 | 2   | **Context Retriever**       | `retrievers/context_retriever.py`          | Queries the running FastAPI app via `context_client.py` to fetch entities, endpoints, models, OpenAPI spec, business logic, repositories, integrations, components, and documentation — driven by the `ContextPlan`.                                                |
-| 3   | **Impact Reasoner**         | `reasoning/impact_reasoner.py`             | Sends the full engineering context and requirement to the LLM and receives a structured `ImpactReasoningResult` covering all impact categories (entities, endpoints, models, business logic, repositories, integrations, components) in a single grounded LLM call. |
+| 3   | **Impact Reasoner**         | `reasoning/impact_reasoner.py`             | Sends the full engineering context and requirement to the LLM and receives a structured `ImpactReasoningResult` covering all impact categories (entities, endpoints, models, business logic, repositories, integrations, components) in a single grounded LLM call with confidence scores and evidence. |
 | 4   | **Impact Validator**        | `validators/impact_validator.py`           | Cross-references each LLM-produced impact against the real engineering context. Filters out hallucinated entities, non-existent endpoints, invalid field operations, and fabricated components.                                                                     |
-| 5   | **Blast Radius Analyzer**   | `analyzers/blast_radius.py`                | Aggregates all validated, layer-specific impacts into a unified, deduplicated blast radius with severity levels.                                                                                                                                                    |
-| 6   | **Report Builder**          | `builders/report_builder.py`               | Assembles all findings into an `ImpactAnalysisReport`, including LLM-generated clarifications and scenario packs.                                                                                                                                                   |
+| 5   | **Grounding Validator**     | `validators/grounding_validator.py`        | Enforces strict grounding against retrieved context objects. Rejects any impact whose target artifact does not exist in the active context, computing grounding rate metrics (`grounded`, `ungrounded`, `grounding_rate`).                                         |
+| 6   | **Semantic Impact Refiner** | `steps/semantic_impact_refiner.py`         | Evaluates candidate necessity using a 4-dimensional validation chain (`requirement_alignment`, `artifact_alignment`, `change_alignment`, `evidence_strength`), assigns `support_level`, requires rejection reasons, and calculates quality summary metrics. Gated by `DecisionGate`. |
+| 7   | **Blast Radius Analyzer**   | `analyzers/blast_radius.py`                | Aggregates all validated and refined impacts into a unified, deduplicated blast radius with severity levels (Low / Medium / High).                                                                                                                                  |
+| 8   | **Report Builder**          | `builders/report_builder.py`               | Assembles all findings into an `ImpactAnalysisReport`, including LLM-generated clarifications and combined test/BDD scenario packs.                                                                                                                               |
 
 #### Impact Reasoner
 
@@ -151,25 +173,56 @@ The `ImpactAgent` orchestrates a **6-step pipeline** via `PipelineExecutor`. Eac
 
 - Constructs a detailed prompt containing the full requirement (title, description, acceptance criteria) and the complete engineering context (entities with columns, endpoints, Pydantic models, OpenAPI spec, business logic, repositories, integrations, and application components).
 - Enforces **strict grounding rules** in the prompt: the LLM must only reference artifacts that exist in the supplied context and must never invent entities, fields, endpoints, or components.
+- Returns structured confidence scores (`confidence`, `relevance_score`, `relevance`) and grounded engineering `evidence` items for each impact.
 - Parses the LLM response into an `ImpactReasoningResult` (via `StructuredOutputParser`) and writes all impact categories directly into the shared `AnalysisContext`.
-- Records the full LLM interaction (prompt, response, provider, model, duration) in `ctx.llm_interactions`.
+- Records the full LLM interaction (prompt, response, provider, model, token usage, duration) in `ctx.llm_interactions`.
+
+#### Grounding & Impact Validation
+
+The pipeline applies two consecutive layers of grounding defense:
+
+1. **Impact Validator** (`validators/impact_validator.py`):
+   - **Entity validation**: Verifies database entities and field operations (`ADD_FIELD` ensures non-existence, `REMOVE_FIELD` checks dependencies via `FIELD_ALIASES`, `MODIFY_FIELD` checks presence).
+   - **Endpoint & Model validation**: Validates route paths against registered OpenAPI paths and models against SQLAlchemy/Pydantic models.
+   - **Component validation**: Validates business logic, repository, and integration impacts.
+
+2. **Grounding Validator** (`validators/grounding_validator.py`):
+   - Cross-references identifiers across entity tables, endpoint paths, models, and component registries.
+   - Emits structured step metrics (`grounded`, `ungrounded`, `grounding_rate`) consumed by downstream execution policies.
+
+#### Semantic Impact Refinement & Execution Gating
+
+1. **Semantic Impact Refiner** (`steps/semantic_impact_refiner.py`):
+   - Validates whether candidate impacts are **explicit** requirements or **necessary semantic consequences** vs. merely speculative implementation choices.
+   - Evaluates each candidate across 4 independent dimensions (0.0 to 1.0):
+     - `requirement_alignment`
+     - `artifact_alignment`
+     - `change_alignment`
+     - `evidence_strength`
+   - Classifies `support_level` into: `DIRECT`, `STRONGLY_IMPLIED`, `WEAKLY_SUPPORTED`, or `SPECULATIVE`.
+   - Requires explicit `rejection_reason` for rejected impacts.
+   - Produces refinement quality metadata (`keep_rate`, `avg_relevance_score`, `avg_confidence`, `kept_avg_relevance`, `kept_avg_confidence`, `removed_avg_relevance`, `removed_avg_confidence`, rejection breakdown).
+
+2. **Execution Policies & Decision Gate** (`app/agent/execution/`):
+   - `DecisionGate` inspects current `AnalysisContext` and step metrics before running expensive steps.
+   - `ExecutionPolicy` applies deterministic heuristics (`NO_IMPACTS`, `SINGLE_STRONG_IMPACT`, `SINGLE_IMPACT_REQUIRES_REFINEMENT`, `MULTIPLE_IMPACTS`, `CONTEXT_NOT_REQUESTED`).
+   - If a single high-confidence, fully grounded impact meets threshold criteria (`avg_confidence >= 0.85`, `avg_relevance >= 0.85`), the policy skips redundant LLM refinement calls, saving latency and cost while recording decision metadata.
+
+#### Agent Observability & Tracing
+
+Located in `app/agent/observability/`, the observability subsystem tracks the complete execution lifecycle:
+
+- **`AgentRunTracker`**: Manages execution traces (`AgentRunTrace`), step spans (`StepTrace`), and LLM invocations (`LLMTrace`).
+- **Token & Performance Tracking**: Measures `input_tokens`, `output_tokens`, `total_tokens`, `tokens_per_second`, character counts, and millisecond durations for all LLM calls.
+- **Trace Output**: Exposed directly in `PipelineResult.agent_run`, capturing run status (`running`, `completed`, `skipped`, `failed`), errors, execution decisions, grounding rates, and step metrics.
 
 #### Report Builders and Scenario Generation
 
-The final report also includes LLM-backed builders for clarification questions and scenario generation:
+The final report includes LLM-backed builders:
 
-- `clarification_builder.py` sends a prompt to the LLM to generate the highest-value clarification questions for the requirement, then falls back to deterministic rule-based questions if parsing or generation fails.
-- `test_scenario_builder.py` now generates **test scenarios and BDD scenarios in the same structured LLM call**. It returns `happy_path`, `negative_cases`, `edge_cases`, and `bdd_scenarios` together, then normalizes them before storing them in the report.
-- Both builders record their LLM interactions in `ctx.llm_interactions` and keep a graceful rule-based fallback path for offline or invalid LLM responses.
-
-#### Impact Validator
-
-`ImpactValidator` (`validators/impact_validator.py`) is a post-LLM grounding step that ensures result quality:
-
-- **Entity validation**: Checks that each reported entity exists in the retrieved context. For `ADD_FIELD`, verifies the field does not already exist. For `REMOVE_FIELD`, verifies the field exists and that the requirement does not actually depend on it (using `FIELD_ALIASES` for semantic matching). For `MODIFY_FIELD`, verifies the field exists.
-- **Endpoint validation**: Filters out any endpoint impacts referencing paths not present in the retrieved endpoint context.
-- **Model validation**: Filters out any Pydantic model impacts referencing models not present in the retrieved model context.
-- **Component validation**: Validates business logic, repository, integration, and generic component impacts against their respective retrieved context lists.
+- `clarification_builder.py` generates high-value clarification questions with deterministic rule-based fallback.
+- `test_scenario_builder.py` generates **test scenarios and BDD scenarios in a single structured LLM call** (`happy_path`, `negative_cases`, `edge_cases`, `bdd_scenarios`), normalized before report assembly.
+- All interactions record telemetry in `ctx.llm_interactions` and agent traces.
 
 #### LLM Integration
 
@@ -177,7 +230,7 @@ The agent uses a **pluggable LLM provider architecture**:
 
 ```
 app/agent/llm/
-├── client.py                # LLMClient — entry point for LLM calls
+├── client.py                # LLMClient — entry point for LLM calls with token & tracing hooks
 ├── constants.py             # Default model (llama3.2:3b) and provider (ollama)
 ├── json_parser.py           # LLMJsonParser — raw JSON extraction
 ├── structured_output.py     # StructuredOutputParser — JSON extraction + Pydantic validation
@@ -190,28 +243,22 @@ app/agent/llm/
     └── ollama_provider.py   # OllamaProvider — Ollama REST API integration
 ```
 
-**Key design decisions:**
-
-- **LLM-first, rule-based fallback**: The `LLMRequirementPlanner` calls the LLM to produce a `ContextPlan`. If the LLM is unavailable, returns malformed JSON, or fails Pydantic validation, the system automatically falls back to the deterministic `RequirementAnalyzer`.
-- **Single-call LLM reasoning**: `ImpactReasoner` consolidates all impact categories into a single LLM call with a richly structured prompt, replacing the previous per-concern analyzer chain. This reduces latency and gives the LLM holistic context.
-- **Combined scenario generation**: `test_scenario_builder.py` generates both test scenarios and BDD scenarios in one structured LLM call, reducing redundant prompt traffic while preserving explicit fallback behavior.
-- **Post-LLM validation**: `ImpactValidator` acts as a grounding filter after the LLM step, removing any hallucinated or contextually invalid impacts before they propagate to the blast radius or report.
-- **Structured output parsing**: `StructuredOutputParser` strips markdown code fences, extracts JSON, unwraps common LLM response wrappers (`result`, `data`, `response`, `output`), and validates against the target Pydantic model.
-- **Traceability**: Every LLM interaction (prompt, response, provider, model, duration) is recorded in `ctx.llm_interactions` for debugging and analysis.
-- **Provider abstraction**: New LLM providers can be added by implementing `BaseLLMProvider` and injecting them into `LLMClient`.
-
 #### Key Models
 
-| Model                   | Purpose                                                              |
-| ----------------------- | -------------------------------------------------------------------- |
-| `Requirement`           | Input: title, description, acceptance criteria                       |
-| `ContextPlan`           | LLM planner output: which context types to retrieve                  |
-| `EngineeringContext`    | Holds all retrieved context (entities, endpoints, models, etc.)      |
-| `ImpactReasoningResult` | Structured LLM output from `ImpactReasoner`: all impact categories   |
-| `AnalysisContext`       | Shared pipeline state passed between all steps                       |
-| `ImpactAnalysisReport`  | Final output report                                                  |
-| `PipelineResult`        | Pipeline execution result: success, metrics, report, error           |
-| `LLMInteraction`        | Recorded LLM call: step, provider, model, prompt, response, duration |
+| Model                            | Purpose                                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------ |
+| `Requirement`                    | Input: title, description, acceptance criteria                                 |
+| `ContextPlan`                    | LLM planner output: which context types to retrieve                            |
+| `EngineeringContext`             | Holds all retrieved context (entities, endpoints, models, etc.)                |
+| `ImpactReasoningResult`          | Structured LLM output from `ImpactReasoner`: all impact categories with scores |
+| `SemanticImpactDecision`         | Per-candidate refinement decision, alignments, support level, rejection reason |
+| `SemanticImpactRefinementResult` | List of semantic refinement decisions and scores                              |
+| `ExecutionDecision`              | DecisionGate output: execution determination, policy name, reason, confidence  |
+| `AnalysisContext`                | Shared pipeline state passed between all steps                                 |
+| `ImpactAnalysisReport`           | Final output report                                                            |
+| `PipelineResult`                 | Execution result: status, total duration, agent run summary, metrics, report   |
+| `AgentRunTrace` / `StepTrace`    | Observability traces capturing execution lifecycle and step metadata           |
+| `LLMInteraction` / `LLMTrace`    | Recorded LLM telemetry: tokens, prompt/response chars, model, speed, latency   |
 
 #### Report Contents
 
@@ -219,7 +266,7 @@ The final `ImpactAnalysisReport` includes:
 
 - **Feature Summary**: Clear business goals.
 - **Component Blast Radius**: Impacted system layers with severity (Low / Medium / High).
-- **Data Model Impact**: Database schema updates.
+- **Data Model Impact**: Database schema updates with confidence & evidence.
 - **API Mutations**: Endpoint schema and contract changes.
 - **Model Impacts**: Pydantic request/response model changes.
 - **Business Logic Impacts**: Affected services, rules, and workflows.
@@ -229,14 +276,6 @@ The final `ImpactAnalysisReport` includes:
 - **Clarification Questions**: Outstanding product and design questions.
 - **Test Scenarios**: Structured happy path, negative, and edge test cases.
 - **BDD Scenarios**: Given/When/Then scenarios.
-
-#### Pipeline Executor
-
-`PipelineExecutor` provides lifecycle hooks and execution metrics:
-
-- **Lifecycle hooks**: `before_pipeline`, `before_step`, `after_step`, `on_error`, `after_pipeline`
-- **Metrics**: Per-step timing (`ctx.execution_metrics`) and total pipeline duration
-- **Result**: `PipelineResult` with success status, executed steps, metrics, and the final report
 
 #### Running the Impact Agent
 
@@ -263,8 +302,6 @@ python app/agent/impact_agent.py
 PYTHONPATH=app/agent python app/agent/impact_agent.py
 ```
 
-> **Note**: If Ollama is unavailable, the agent automatically falls back to the rule-based `RequirementAnalyzer` and the pipeline continues without interruption.
-
 ---
 
 ## Project Structure
@@ -274,17 +311,28 @@ inventory-management-service/
 ├── app/
 │   ├── main.py                         # FastAPI application entry point
 │   ├── agent/                          # Impact Analysis Agent
-│   │   ├── impact_agent.py             # ImpactAgent orchestrator (6-step pipeline)
-│   │   ├── models.py                   # Pydantic domain models (Requirement, AnalysisContext, ImpactReasoningResult, Reports, etc.)
+│   │   ├── impact_agent.py             # ImpactAgent orchestrator (8-step pipeline)
+│   │   ├── models.py                   # Pydantic domain models (Requirement, AnalysisContext, Reports, etc.)
 │   │   ├── context_client.py           # HTTP client for Engineering Context APIs
 │   │   ├── core/
 │   │   │   ├── agent_step.py           # AgentStep — abstract base class for pipeline steps
-│   │   │   ├── pipeline_executor.py    # PipelineExecutor — lifecycle, metrics, error handling
-│   │   │   └── logger.py              # Agent-specific logger
+│   │   │   ├── pipeline_executor.py    # PipelineExecutor — lifecycle, metrics, decision gating, run tracking
+│   │   │   └── logger.py               # Agent-specific logger
+│   │   ├── execution/                  # Execution policy and gating subsystem
+│   │   │   ├── decision_gate.py        # DecisionGate — runtime context evaluation
+│   │   │   ├── execution_policy.py     # ExecutionPolicy — deterministic skipping and execution rules
+│   │   │   ├── execution_decision.py   # ExecutionDecision data model
+│   │   │   └── execution_context.py    # ExecutionContext data model
+│   │   ├── observability/              # Observability and tracing subsystem
+│   │   │   ├── agent_run_tracker.py    # AgentRunTracker — run and step span management
+│   │   │   └── models.py               # AgentRunTrace, StepTrace, LLMTrace
+│   │   ├── steps/                      # Specialized pipeline steps
+│   │   │   └── semantic_impact_refiner.py # SemanticImpactRefiner — LLM necessity & evidence validation
 │   │   ├── reasoning/
 │   │   │   └── impact_reasoner.py      # ImpactReasoner — single LLM call for all impact categories
 │   │   ├── validators/
-│   │   │   └── impact_validator.py     # ImpactValidator — post-LLM grounding & hallucination filter
+│   │   │   ├── impact_validator.py     # ImpactValidator — schema, field & endpoint validation
+│   │   │   └── grounding_validator.py  # GroundingValidator — strict context grounding & rate metrics
 │   │   ├── analyzers/
 │   │   │   ├── requirement_analyzer.py # Rule-based requirement analysis (fallback planner)
 │   │   │   ├── entity_analyzer.py      # Rule-based database schema impact (fallback)
@@ -301,11 +349,11 @@ inventory-management-service/
 │   │   │   ├── feature_summary_builder.py
 │   │   │   ├── clarification_builder.py # LLM-first clarification question generation
 │   │   │   ├── test_scenario_builder.py # Test + BDD generation in one structured LLM call
-│   │   │   └── bdd_builder.py         # Rule-based fallback for BDD scenarios
+│   │   │   └── bdd_builder.py          # Rule-based fallback for BDD scenarios
 │   │   ├── retrievers/
 │   │   │   └── context_retriever.py    # Plan-driven engineering context retrieval
 │   │   └── llm/
-│   │       ├── client.py               # LLMClient — unified LLM interface
+│   │       ├── client.py               # LLMClient — unified LLM interface with token metrics
 │   │       ├── constants.py            # Model & provider defaults
 │   │       ├── json_parser.py          # Raw JSON extraction from LLM responses
 │   │       ├── structured_output.py    # JSON extraction + Pydantic validation
@@ -343,7 +391,7 @@ Interactive documentation is available at:
 Run unit tests with:
 
 ```bash
-venv\Scripts\pytest
+pytest
 ```
 
 ## Notes
@@ -353,4 +401,5 @@ venv\Scripts\pytest
 - Docker Compose includes `db` and `elasticsearch` services and mounts the project into the container for local development.
 - The Impact Agent requires the FastAPI service to be running for engineering context retrieval.
 - LLM integration is optional — the agent degrades gracefully to rule-based analysis when Ollama is unavailable.
-- `ImpactReasoner` and `ImpactValidator` work in tandem: the reasoner produces LLM-grounded impacts; the validator ensures they reference real artifacts from the engineering context before they reach the report.
+- `ImpactReasoner`, `ImpactValidator`, `GroundingValidator`, and `SemanticImpactRefiner` form a multi-tier defense: initial grounded generation, schema validation, contextual grounding verification, and semantic necessity refinement.
+
