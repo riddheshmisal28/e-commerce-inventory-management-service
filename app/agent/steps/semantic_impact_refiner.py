@@ -542,14 +542,28 @@ STRICT RULES
     change on the artifact.
 
     STRONGLY_IMPLIED:
-    The requirement does not necessarily name the exact impact,
-    but the impact is a necessary semantic consequence or is
-    strongly implied, and the engineering context supports it.
+    The requirement does not necessarily name the exact artifact
+    or change representation, but the candidate change is a
+    necessary semantic consequence of the required behavior.
+
+    The candidate artifact must be a reasonable representation of
+    the affected business concept.
+
+    Engineering context may provide direct, partial, or indirect
+    support for the artifact assignment. The evidence does not need
+    to prove that the artifact is the exact implementation owner.
+
+    Low evidence_strength affects confidence but does not invalidate
+    semantic necessity.
 
     WEAKLY_SUPPORTED:
-    The impact has some semantic relationship to the requirement,
-    but the proposed change is not clearly necessary or the
-    evidence is incomplete.
+    The candidate has some semantic relationship to the requirement,
+    but the change is not clearly necessary, OR the candidate
+    artifact has only weak relevance to the required business
+    behavior.
+
+    Weak engineering evidence alone does not make an explicitly
+    required business rule weakly supported.
 
     SPECULATIVE:
     The impact is merely a possible implementation choice,
@@ -634,82 +648,234 @@ The evidence does not adequately support the proposed change
 or is speculative.
 
 ==========================================================
+NUMERICAL THRESHOLDS
+==========================================================
+
+These are consistency checks, not the primary semantic gate.
+
+1. EXPLICITLY REQUIRED BUSINESS RULE
+
+If the candidate directly represents a condition, calculation,
+validation, trigger, state transition, or business rule stated
+in the requirement:
+
+    keep = true
+
+provided the candidate artifact is a reasonable representation
+of the business concept.
+
+Low evidence_strength does NOT automatically cause rejection.
+
+The requirement itself establishes the semantic necessity of the
+business rule.
+
+2. NECESSARY SEMANTIC CONSEQUENCE
+
+If the candidate is not explicitly stated but is necessary to
+fulfill the required business behavior:
+
+    keep = true
+
+provided the candidate artifact is reasonably connected to the
+required behavior.
+
+3. PLAUSIBLE IMPLEMENTATION
+
+If the candidate represents only one possible implementation
+approach and is not required by the requirement:
+
+    keep = false
+
+even when the artifact is technically capable of implementing it.
+
+4. UNSUPPORTED ARTIFACT
+
+If the candidate artifact has no meaningful relationship to the
+required business behavior:
+
+    keep = false
+
+5. RELEVANCE SCORE
+
+If relevance_score < 0.50:
+
+    keep = false
+
+The candidate is not sufficiently related to the requirement.
+
+6. CONFIDENCE
+
+confidence measures engineering evidence strength.
+
+Low confidence does NOT automatically imply rejection when the
+requirement explicitly establishes the semantic change.
+
+For explicitly required business rules:
+
+    semantic necessity has priority over evidence confidence.
+
+For inferred changes:
+
+    both semantic necessity and reasonable artifact support are
+    required.
+
+7. IMPORTANT
+
+Do NOT use confidence as a substitute for semantic necessity.
+
+Do NOT reject an explicitly required business rule solely because
+the engineering context does not prove the exact implementation
+owner.
+
+==========================================================
 IMPORTANT DISTINCTION
 ==========================================================
 
 relevance_score and confidence are independent.
 
-relevance_score measures the relationship between:
+relevance_score measures:
 
-    Requirement -> Candidate impact
+    Requirement -> Candidate semantic change
 
-confidence measures the strength of:
+confidence measures:
 
-    Engineering evidence -> Candidate impact
+    Engineering evidence -> Candidate artifact/change assignment
 
 These values do NOT need to be equal.
 
-Example:
+A requirement can strongly establish that a business rule,
+condition, validation, calculation, or state transition is
+required even when the available engineering context does not
+prove exactly where that behavior should be implemented.
 
-A requirement may clearly require low-stock behavior, giving
-high requirement alignment, while the available engineering
-evidence may only weakly establish which service should own
-that behavior.
+For example:
 
-In that case:
+Requirement:
+"Trigger an alert when SKU quantity is below its configured
+threshold."
 
-requirement_alignment = HIGH
-artifact_alignment = HIGH
-change_alignment = HIGH
-evidence_strength = LOW or MEDIUM
+Candidate:
+"Evaluate SKU quantity against its configured threshold."
 
-Do NOT artificially increase evidence_strength to justify
-keeping an impact.
+The requirement directly establishes the semantic necessity of
+the quantity-vs-threshold rule.
+
+Therefore:
+
+    requirement_alignment = HIGH
+    change_alignment = HIGH
+
+If the candidate artifact is `skus` because `skus.quantity`
+exists and the artifact represents SKU quantity, then:
+
+    artifact_alignment = MEDIUM or HIGH
+
+If the engineering context does not explicitly show that `skus`
+owns the alert or threshold evaluation logic:
+
+    evidence_strength = LOW or MEDIUM
+
+This MUST NOT automatically cause rejection.
+
+The missing evidence concerns artifact ownership, not semantic
+necessity.
+
+Do not require engineering evidence to independently prove a
+business rule that is already explicitly established by the
+requirement.
+
+Engineering evidence should determine how confidently the
+candidate can be attributed to the proposed artifact.
 
 ==========================================================
 DECISION RULE
 ==========================================================
 
-Keep an impact only when BOTH semantic necessity and engineering
-support are sufficient.
+Evaluate candidates in two separate stages.
 
-A candidate should be kept when:
+STAGE 1 — SEMANTIC NECESSITY
 
-1. The requirement explicitly requires the impact OR the impact
-   is a necessary semantic consequence of the requirement.
+First determine whether the proposed CHANGE is required by the
+requirement.
 
-AND
+Keep the candidate when:
 
-2. The supplied engineering context provides sufficient
-   evidence that the proposed artifact/change is a valid impact.
+1. The requirement explicitly requires the change, OR
+2. The change is a necessary semantic consequence of the
+   required business behavior.
 
-The following MUST be rejected:
+Reject when:
 
-- merely plausible implementation choices
-- generic architectural assumptions
-- impacts supported only by keyword similarity
-- impacts where the artifact is related but the proposed
-  change does not follow from the requirement
-- impacts where evidence only proves artifact existence
-- impacts where the requirement-to-change relationship is weak
+1. The change is merely a plausible implementation choice, OR
+2. The change has no meaningful semantic relationship to the
+   requirement.
 
-Numerical scores are secondary consistency checks.
+STAGE 2 — ARTIFACT ASSIGNMENT
 
-If:
+If the semantic change is required, evaluate whether the
+candidate artifact is a reasonable representation or owner of
+that change.
 
-relevance_score < 0.50
+Artifact evidence affects:
 
-OR
+- artifact_alignment
+- evidence_strength
+- confidence
+- support_level
 
-confidence < 0.50
+Artifact evidence MUST NOT override explicit semantic necessity
+when the artifact is a reasonable representation of the business
+concept affected by the requirement.
 
-then:
+For example:
 
-keep = false
+Requirement:
+"Evaluate SKU quantity against a configurable threshold."
 
-However, a candidate MUST also be rejected when it is merely
-a plausible implementation choice, even if its numerical scores
-are above 0.50.
+Candidate:
+
+    category = entity
+    artifact = skus
+    change = Evaluate quantity against a configurable threshold.
+
+Engineering context:
+
+    skus.quantity exists.
+
+Correct reasoning:
+
+    The quantity-threshold rule is explicitly established by the
+    requirement.
+
+    The `skus` entity represents SKU quantity and therefore is a
+    reasonable artifact associated with the required behavior.
+
+    The evidence does not prove that `skus` is the exact
+    implementation owner of the rule.
+
+Therefore the candidate may be KEPT with:
+
+    high requirement_alignment
+    medium/high artifact_alignment
+    high change_alignment
+    low/medium evidence_strength
+    STRONGLY_IMPLIED support_level
+
+Do NOT reject this candidate solely because the engineering
+context does not prove implementation ownership.
+
+Reject the candidate only when the artifact itself is not a
+reasonable representation or owner of the required behavior.
+
+IMPORTANT:
+
+"Insufficient evidence that this artifact owns the behavior"
+
+is NOT equivalent to:
+
+"This candidate is semantically unnecessary."
+
+Only the latter is sufficient for semantic rejection.
 
 ==========================================================
 REQUIREMENT
@@ -781,8 +947,14 @@ OUTPUT REQUIREMENTS
 - Do not return artifact.
 - Do not return change_type.
 - Preserve the candidate's semantic identity.
-- support_level must describe the strength of the complete
-  requirement-to-artifact-to-change-to-evidence chain.
+- support_level must describe the strength of the
+  requirement-to-artifact-to-change relationship, while considering
+  evidence_strength as the measure of engineering support for the
+  artifact/change assignment.
+- Low evidence_strength must not automatically downgrade or reject
+  an explicitly required semantic business rule when the candidate
+  artifact is a reasonable representation of the affected business
+  concept.
 - rejection_reason must explain specifically why a rejected
   candidate failed that chain.
 - Kept impacts must have rejection_reason = null.
@@ -915,18 +1087,18 @@ OUTPUT REQUIREMENTS
                     f"{sorted(SUPPORT_LEVELS)}."
                 )
 
-            if (
-                decision.support_level == "DIRECT"
-                and min(
-                    decision.requirement_alignment,
-                    decision.artifact_alignment,
-                    decision.change_alignment,
-                    decision.evidence_strength,
-                ) < 0.90
-            ):
+            expected_support_level = (
+                self._support_level_from_alignment(
+                    decision
+                )
+            )
+
+            if decision.support_level != expected_support_level:
                 raise ValueError(
-                    f"support_level DIRECT for impact_id={decision.impact_id} "
-                    "requires all alignment assessments >= 0.90."
+                    f"Inconsistent support_level for "
+                    f"impact_id={decision.impact_id}. "
+                    f"LLM returned {decision.support_level}, "
+                    f"but alignment scores imply {expected_support_level}."
                 )
 
             if not decision.keep and not decision.rejection_reason:
@@ -945,20 +1117,46 @@ OUTPUT REQUIREMENTS
     def _support_level_from_alignment(
         decision: SemanticImpactDecision,
     ) -> str:
-        scores = (
-            decision.requirement_alignment,
-            decision.artifact_alignment,
-            decision.change_alignment,
-            decision.evidence_strength,
-        )
 
-        if min(scores) >= 0.90:
+        requirement = decision.requirement_alignment
+        artifact = decision.artifact_alignment
+        change = decision.change_alignment
+        evidence = decision.evidence_strength
+
+        # DIRECT:
+        # The complete requirement -> artifact -> change -> evidence
+        # chain is strongly supported.
+        if (
+            requirement >= 0.90
+            and artifact >= 0.90
+            and change >= 0.90
+            and evidence >= 0.90
+        ):
             return "DIRECT"
 
-        if min(scores) >= 0.75:
+        # STRONGLY_IMPLIED:
+        # The requirement clearly establishes the semantic change and
+        # the artifact is a reasonable representation of the affected
+        # business concept.
+        #
+        # Evidence does NOT need to be >= 0.75 because evidence strength
+        # represents implementation/ownership certainty, not semantic
+        # necessity.
+        if (
+            requirement >= 0.75
+            and artifact >= 0.70
+            and change >= 0.75
+        ):
             return "STRONGLY_IMPLIED"
 
-        if min(scores) >= 0.50:
+        # WEAKLY_SUPPORTED:
+        # There is meaningful relationship, but the semantic/artifact
+        # chain is not strong enough for the stronger classifications.
+        if (
+            requirement >= 0.50
+            and artifact >= 0.50
+            and change >= 0.50
+        ):
             return "WEAKLY_SUPPORTED"
 
         return "SPECULATIVE"
