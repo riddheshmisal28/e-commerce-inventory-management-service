@@ -1,5 +1,5 @@
 import pytest
-
+from unittest.mock import MagicMock
 from app.agent.core.pipeline_executor import PipelineExecutor
 from app.agent.models import (
     AnalysisContext,
@@ -38,6 +38,53 @@ SEMANTIC_ACCURACY_CASES = [
     ("Store cancellation reason in order data", True, "DIRECT", None),
     ("Add email notification after successful payment", True, "STRONGLY_IMPLIED", None),
 ]
+
+
+def create_refiner():
+    return SemanticImpactRefiner()
+
+
+def create_candidate():
+    return DataModelImpact(
+        entity="skus",
+        change_type="BUSINESS_RULE",
+        change="Evaluate quantity against a configurable threshold.",
+        reason=(
+            "The requirement explicitly requires evaluating SKU quantity "
+            "against a configurable threshold."
+        ),
+        evidence=["The skus entity contains the quantity field."],
+        relevance_score=0.9,
+        confidence=1.0,
+        relevance="HIGH",
+    )
+
+
+def create_decision(
+    keep=True,
+    relevance_score=1.0,
+    confidence=0.75,
+    support_level="STRONGLY_IMPLIED",
+):
+    return SemanticImpactDecision(
+        impact_id=0,
+        keep=keep,
+        relevance_score=relevance_score,
+        confidence=confidence,
+        relevance="HIGH",
+        reason=(
+            "The requirement explicitly establishes the quantity-threshold "
+            "business rule. The skus entity contains quantity and is a "
+            "reasonable representation of the affected business concept."
+        ),
+        evidence=["The skus entity contains the quantity field."],
+        support_level=support_level,
+        rejection_reason=None,
+        requirement_alignment=1.0,
+        artifact_alignment=0.8,
+        change_alignment=1.0,
+        evidence_strength=0.6,
+    )
 
 
 def _semantic_accuracy_decision(
@@ -117,6 +164,374 @@ def test_semantic_accuracy_fixture_validates_and_summarizes_all_cases():
         "IMPLEMENTATION_CHOICE": 3,
         "SPECULATIVE": 1,
     }
+
+
+def test_required_quantity_threshold_rule_stays_kept_as_strongly_implied():
+    refiner = create_refiner()
+    candidate = create_candidate()
+    decision = create_decision()
+
+    refiner._validate_decisions(
+        [{"impact_id": 0, "category": "entity", "artifact": "skus", "change_type": "BUSINESS_RULE"}],
+        SemanticImpactRefinementResult(decisions=[decision]),
+    )
+
+    summary = SemanticImpactRefiner._summarize_refinement([decision])
+
+    assert candidate.entity == "skus"
+    assert candidate.change == "Evaluate quantity against a configurable threshold."
+    assert decision.keep is True
+    assert decision.support_level == "STRONGLY_IMPLIED"
+    assert decision.rejection_reason is None
+    assert summary["impacts_after"] == 1
+    assert summary["strongly_implied_count"] == 1
+
+
+def test_explicit_business_rule_is_kept_despite_incomplete_ownership_evidence():
+    refiner = create_refiner()
+
+    ctx = MagicMock(spec=AnalysisContext)
+
+    ctx.entity_impacts = [create_candidate()]
+    ctx.endpoint_impacts = []
+    ctx.model_impacts = []
+    ctx.business_logic_impacts = []
+    ctx.repository_impacts = []
+    ctx.integration_impacts = []
+    ctx.component_impacts = []
+    ctx.llm_interactions = []
+    ctx.refinement_decisions = []
+
+    ctx.requirement = MagicMock()
+    ctx.requirement.title = "Low Stock Alert"
+    ctx.requirement.description = (
+        "Notify inventory managers when a SKU's quantity "
+        "falls below its configured threshold."
+    )
+    ctx.requirement.acceptance_criteria = [
+        "Evaluate SKU quantity against its configured threshold."
+    ]
+
+    decision = create_decision()
+
+    refiner.client.generate_with_retry = MagicMock(
+        return_value=MagicMock(
+            provider="ollama",
+            model="qwen3:8b",
+            response='{"decisions": []}',
+            duration_ms=100,
+            input_tokens=100,
+            output_tokens=50,
+            total_tokens=150,
+        )
+    )
+
+    refiner.output_parser.parse = MagicMock(
+        return_value=SemanticImpactRefinementResult(decisions=[decision])
+    )
+
+    refiner.execute(ctx)
+
+    assert len(ctx.entity_impacts) == 1
+
+    impact = ctx.entity_impacts[0]
+
+    assert impact.entity == "skus"
+    assert impact.change_type == "BUSINESS_RULE"
+    assert impact.change == (
+        "Evaluate quantity against a configurable threshold."
+    )
+    assert impact.relevance_score == 1.0
+    assert impact.confidence == 0.75
+
+
+def test_plausible_implementation_is_rejected():
+    refiner = create_refiner()
+
+    ctx = MagicMock(spec=AnalysisContext)
+
+    ctx.entity_impacts = []
+    ctx.endpoint_impacts = []
+    ctx.model_impacts = []
+    ctx.business_logic_impacts = [
+        MagicMock(
+            component="SKUService",
+            change_type="BUSINESS_RULE",
+            change="Add email notification retry mechanism.",
+            reason="SKUService handles SKU operations.",
+            evidence=["SKUService handles SKU creation and updates."],
+            relevance_score=0.5,
+            confidence=0.8,
+            relevance="MEDIUM",
+        )
+    ]
+    ctx.repository_impacts = []
+    ctx.integration_impacts = []
+    ctx.component_impacts = []
+    ctx.llm_interactions = []
+    ctx.refinement_decisions = []
+
+    ctx.requirement = MagicMock()
+    ctx.requirement.title = "Low Stock Alert"
+    ctx.requirement.description = (
+        "Notify inventory managers when a SKU's quantity "
+        "falls below its configured threshold."
+    )
+    ctx.requirement.acceptance_criteria = []
+
+    decision = SemanticImpactDecision(
+        impact_id=0,
+        keep=False,
+        relevance_score=0.35,
+        confidence=0.4,
+        relevance="LOW",
+        reason=(
+            "The candidate describes a possible notification implementation "
+            "rather than a requirement-mandated change."
+        ),
+        evidence=["SKUService handles SKU creation and updates."],
+        support_level="SPECULATIVE",
+        rejection_reason=(
+            "The requirement requires a low-stock notification but does not "
+            "require an email retry mechanism specifically. The proposed "
+            "change is a plausible implementation choice."
+        ),
+        requirement_alignment=0.4,
+        artifact_alignment=0.6,
+        change_alignment=0.3,
+        evidence_strength=0.4,
+    )
+
+    refiner.output_parser.parse = MagicMock(
+        return_value=SemanticImpactRefinementResult(decisions=[decision])
+    )
+
+    refiner.client.generate_with_retry = MagicMock(
+        return_value=MagicMock(
+            provider="ollama",
+            model="qwen3:8b",
+            response="{}",
+            duration_ms=100,
+            input_tokens=100,
+            output_tokens=50,
+            total_tokens=150,
+        )
+    )
+
+    refiner.execute(ctx)
+
+    assert len(ctx.business_logic_impacts) == 0
+
+
+def test_explicit_requirement_can_be_kept_with_low_evidence_strength():
+    refiner = create_refiner()
+
+    decision = SemanticImpactDecision(
+        impact_id=0,
+        keep=True,
+        relevance_score=1.0,
+        confidence=0.5,
+        relevance="HIGH",
+        reason="The business rule is explicitly required.",
+        evidence=["The skus entity contains the quantity field."],
+        support_level="STRONGLY_IMPLIED",
+        rejection_reason=None,
+        requirement_alignment=1.0,
+        artifact_alignment=0.8,
+        change_alignment=1.0,
+        evidence_strength=0.5,
+    )
+
+    result = SemanticImpactRefinementResult(decisions=[decision])
+
+    refiner._validate_decisions(
+        [
+            {
+                "impact_id": 0,
+                "category": "entity",
+                "artifact": "skus",
+                "change_type": "BUSINESS_RULE",
+            }
+        ],
+        result,
+    )
+
+
+def test_direct_support_requires_all_alignment_scores_above_0_90():
+    refiner = create_refiner()
+
+    decision = create_decision(
+        support_level="DIRECT",
+    )
+    decision.evidence_strength = 0.70
+
+    result = SemanticImpactRefinementResult(decisions=[decision])
+
+    with pytest.raises(ValueError, match="support_level DIRECT"):
+        refiner._validate_decisions(
+            [
+                {
+                    "impact_id": 0,
+                    "category": "entity",
+                    "artifact": "skus",
+                    "change_type": "BUSINESS_RULE",
+                }
+            ],
+            result,
+        )
+
+
+def test_direct_support_is_valid_when_all_scores_are_high():
+    refiner = create_refiner()
+
+    decision = create_decision(
+        support_level="DIRECT",
+    )
+    decision.requirement_alignment = 1.0
+    decision.artifact_alignment = 0.95
+    decision.change_alignment = 1.0
+    decision.evidence_strength = 0.95
+
+    result = SemanticImpactRefinementResult(decisions=[decision])
+
+    refiner._validate_decisions(
+        [
+            {
+                "impact_id": 0,
+                "category": "entity",
+                "artifact": "skus",
+                "change_type": "BUSINESS_RULE",
+            }
+        ],
+        result,
+    )
+
+
+def test_missing_impact_id_is_rejected():
+    refiner = create_refiner()
+
+    result = SemanticImpactRefinementResult(decisions=[])
+
+    impacts = [
+        {
+            "impact_id": 0,
+            "category": "entity",
+            "artifact": "skus",
+            "change_type": "BUSINESS_RULE",
+        }
+    ]
+
+    with pytest.raises(ValueError, match="Missing impact_ids"):
+        refiner._validate_decisions(
+            impacts,
+            result,
+        )
+
+
+def test_duplicate_impact_id_is_rejected():
+    refiner = create_refiner()
+
+    decision1 = create_decision()
+    decision2 = create_decision()
+
+    result = SemanticImpactRefinementResult(decisions=[decision1, decision2])
+
+    impacts = [
+        {
+            "impact_id": 0,
+            "category": "entity",
+            "artifact": "skus",
+            "change_type": "BUSINESS_RULE",
+        },
+        {
+            "impact_id": 1,
+            "category": "entity",
+            "artifact": "products",
+            "change_type": "BUSINESS_RULE",
+        },
+    ]
+
+    with pytest.raises(ValueError, match="duplicate"):
+        refiner._validate_decisions(
+            impacts,
+            result,
+        )
+
+
+def test_apply_result_removes_rejected_impacts():
+    refiner = create_refiner()
+
+    impact = create_candidate()
+
+    ctx = MagicMock(spec=AnalysisContext)
+
+    ctx.entity_impacts = [impact]
+    ctx.endpoint_impacts = []
+    ctx.model_impacts = []
+    ctx.business_logic_impacts = []
+    ctx.repository_impacts = []
+    ctx.integration_impacts = []
+    ctx.component_impacts = []
+
+    decision = SemanticImpactDecision(
+        impact_id=0,
+        keep=False,
+        relevance_score=0.3,
+        confidence=0.3,
+        relevance="LOW",
+        reason="Not required.",
+        evidence=[],
+        support_level="SPECULATIVE",
+        rejection_reason="The candidate is speculative.",
+        requirement_alignment=0.3,
+        artifact_alignment=0.4,
+        change_alignment=0.3,
+        evidence_strength=0.2,
+    )
+
+    result = SemanticImpactRefinementResult(decisions=[decision])
+
+    impacts = refiner._collect_impacts(ctx)
+
+    refiner._apply_result(
+        ctx,
+        impacts,
+        result,
+    )
+
+    assert ctx.entity_impacts == []
+
+
+def test_apply_result_keeps_and_updates_impact():
+    refiner = create_refiner()
+
+    impact = create_candidate()
+
+    ctx = MagicMock(spec=AnalysisContext)
+
+    ctx.entity_impacts = [impact]
+    ctx.endpoint_impacts = []
+    ctx.model_impacts = []
+    ctx.business_logic_impacts = []
+    ctx.repository_impacts = []
+    ctx.integration_impacts = []
+    ctx.component_impacts = []
+
+    decision = create_decision()
+
+    result = SemanticImpactRefinementResult(decisions=[decision])
+
+    impacts = refiner._collect_impacts(ctx)
+
+    refiner._apply_result(
+        ctx,
+        impacts,
+        result,
+    )
+
+    assert len(ctx.entity_impacts) == 1
+    assert ctx.entity_impacts[0].relevance_score == 1.0
+    assert ctx.entity_impacts[0].confidence == 0.75
 
 
 def test_refiner_prompt_contains_v2_semantic_accuracy_instructions():

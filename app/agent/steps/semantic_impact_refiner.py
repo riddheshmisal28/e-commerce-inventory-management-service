@@ -159,12 +159,14 @@ class SemanticImpactRefiner(AgentStep):
     @staticmethod
     def _summarize_refinement(
         decisions: list[SemanticImpactDecision],
-    ) -> dict[str, float | int]:
+    ) -> dict:
+
         kept = [
             decision
             for decision in decisions
             if decision.keep
         ]
+
         removed = [
             decision
             for decision in decisions
@@ -175,6 +177,7 @@ class SemanticImpactRefiner(AgentStep):
             items: list[SemanticImpactDecision],
             field: str,
         ) -> float:
+
             if not items:
                 return 0.0
 
@@ -234,7 +237,9 @@ class SemanticImpactRefiner(AgentStep):
                 for decision in decisions
             ),
             "rejection_by_reason": (
-                SemanticImpactRefiner._rejection_by_reason(removed)
+                SemanticImpactRefiner._rejection_by_reason(
+                    removed
+                )
             ),
         }
 
@@ -315,7 +320,37 @@ class SemanticImpactRefiner(AgentStep):
         impact,
     ) -> dict:
 
-        data = impact.model_dump()
+        if hasattr(impact, "model_dump") and callable(impact.model_dump):
+            data = impact.model_dump()
+            if not isinstance(data, dict):
+                data = {}
+        elif hasattr(impact, "__dict__"):
+            data = {
+                key: value
+                for key, value in impact.__dict__.items()
+                if not key.startswith("_")
+            }
+        else:
+            data = {}
+
+        if not data:
+            data = {
+                key: getattr(impact, key)
+                for key in (
+                    "entity",
+                    "endpoint",
+                    "model",
+                    "component",
+                    "change_type",
+                    "change",
+                    "reason",
+                    "evidence",
+                    "relevance_score",
+                    "confidence",
+                    "relevance",
+                )
+                if hasattr(impact, key)
+            }
 
         data["category"] = category
 
@@ -537,9 +572,12 @@ STRICT RULES
 18. support_level must be one of:
 
     DIRECT:
-    The requirement explicitly requires the candidate impact,
-    and the supplied evidence directly supports the specific
-    change on the artifact.
+    The requirement explicitly requires the candidate change,
+    and the candidate artifact is a direct representation or
+    owner of the affected business behavior.
+
+    The supplied engineering evidence directly supports the
+    artifact/change assignment.
 
     STRONGLY_IMPLIED:
     The requirement does not necessarily name the exact artifact
@@ -947,10 +985,25 @@ OUTPUT REQUIREMENTS
 - Do not return artifact.
 - Do not return change_type.
 - Preserve the candidate's semantic identity.
-- support_level must describe the strength of the
-  requirement-to-artifact-to-change relationship, while considering
-  evidence_strength as the measure of engineering support for the
-  artifact/change assignment.
+- support_level describes the strongest justified level of
+  semantic and engineering support across the:
+
+  Requirement -> Change -> Artifact -> Evidence chain.
+
+  Semantic necessity and engineering evidence must be evaluated
+  independently.
+
+  A candidate may be STRONGLY_IMPLIED even when evidence_strength
+  is below 0.75, provided that:
+
+  - requirement_alignment is high,
+  - change_alignment is high,
+  - artifact_alignment is reasonable,
+  - and the candidate represents required business behavior.
+
+  Do not reject or downgrade an explicitly required business rule
+  solely because engineering evidence does not prove exact
+  implementation ownership.
 - Low evidence_strength must not automatically downgrade or reject
   an explicitly required semantic business rule when the candidate
   artifact is a reasonable representation of the affected business
@@ -991,6 +1044,24 @@ OUTPUT REQUIREMENTS
         )
 
         # --------------------------------------------------------------
+        # Duplicate decisions
+        # --------------------------------------------------------------
+
+        duplicates = {
+            impact_id
+            for impact_id in decision_ids
+            if decision_ids.count(impact_id) > 1
+        }
+
+        if duplicates:
+
+            raise ValueError(
+                "Semantic Impact Refiner returned duplicate "
+                f"decisions for impact_ids: "
+                f"{sorted(duplicates)}"
+            )
+
+        # --------------------------------------------------------------
         # Missing decisions
         # --------------------------------------------------------------
 
@@ -1022,24 +1093,6 @@ OUTPUT REQUIREMENTS
                 "Semantic Impact Refiner returned decisions "
                 f"for unknown impact_ids: "
                 f"{sorted(unexpected_ids)}"
-            )
-
-        # --------------------------------------------------------------
-        # Duplicate decisions
-        # --------------------------------------------------------------
-
-        duplicates = {
-            impact_id
-            for impact_id in decision_ids
-            if decision_ids.count(impact_id) > 1
-        }
-
-        if duplicates:
-
-            raise ValueError(
-                "Semantic Impact Refiner returned duplicate "
-                f"decisions for impact_ids: "
-                f"{sorted(duplicates)}"
             )
 
         # --------------------------------------------------------------
@@ -1080,6 +1133,57 @@ OUTPUT REQUIREMENTS
                         f"{value}. Expected a value between 0 and 1."
                     )
 
+            # ----------------------------------------------------------
+            # Semantic consistency
+            # ----------------------------------------------------------
+
+            if (
+                decision.keep
+                and decision.relevance_score < 0.50
+            ):
+                raise ValueError(
+                    f"Kept impact_id={decision.impact_id} has "
+                    f"relevance_score={decision.relevance_score}. "
+                    "Kept impacts must have relevance_score >= 0.50."
+                )
+
+            # A candidate can have strong semantic alignment while
+            # still being rejected because the artifact assignment
+            # is wrong. Therefore this is intentionally a warning,
+            # not a hard failure.
+            if (
+                not decision.keep
+                and decision.relevance_score >= 0.90
+                and decision.requirement_alignment >= 0.90
+                and decision.change_alignment >= 0.90
+            ):
+                logger.warning(
+                    "Rejected impact has strong semantic alignment",
+                    extra={
+                        "impact_id": decision.impact_id,
+                        "relevance_score": (
+                            decision.relevance_score
+                        ),
+                        "requirement_alignment": (
+                            decision.requirement_alignment
+                        ),
+                        "artifact_alignment": (
+                            decision.artifact_alignment
+                        ),
+                        "change_alignment": (
+                            decision.change_alignment
+                        ),
+                        "evidence_strength": (
+                            decision.evidence_strength
+                        ),
+                        "support_level": (
+                            decision.support_level
+                        ),
+                        "rejection_reason": (
+                            decision.rejection_reason
+                        ),
+                    },
+                )
             if decision.support_level not in SUPPORT_LEVELS:
                 raise ValueError(
                     f"Invalid support_level for impact_id={decision.impact_id}: "
@@ -1087,18 +1191,58 @@ OUTPUT REQUIREMENTS
                     f"{sorted(SUPPORT_LEVELS)}."
                 )
 
+            # ----------------------------------------------------------
+            # Compare LLM support level with deterministic assessment.
+            #
+            # This is intentionally a warning for now. We want to
+            # observe the model's behavior across multiple requirements
+            # before making this a hard validation rule.
+            # ----------------------------------------------------------
+
             expected_support_level = (
-                self._support_level_from_alignment(
+                self._expected_support_level(
                     decision
                 )
             )
 
+            if (
+                decision.keep
+                and decision.support_level
+                != expected_support_level
+            ):
+                logger.warning(
+                    "LLM support level differs from deterministic "
+                    "alignment assessment",
+                    extra={
+                        "impact_id": decision.impact_id,
+                        "llm_support_level": (
+                            decision.support_level
+                        ),
+                        "expected_support_level": (
+                            expected_support_level
+                        ),
+                        "requirement_alignment": (
+                            decision.requirement_alignment
+                        ),
+                        "artifact_alignment": (
+                            decision.artifact_alignment
+                        ),
+                        "change_alignment": (
+                            decision.change_alignment
+                        ),
+                        "evidence_strength": (
+                            decision.evidence_strength
+                        ),
+                    },
+                )
+
             if decision.support_level != expected_support_level:
                 raise ValueError(
-                    f"Inconsistent support_level for "
+                    f"Inconsistent support_level {decision.support_level} for "
                     f"impact_id={decision.impact_id}. "
                     f"LLM returned {decision.support_level}, "
-                    f"but alignment scores imply {expected_support_level}."
+                    f"but alignment scores imply {expected_support_level}. "
+                    f"support_level {expected_support_level}"
                 )
 
             if not decision.keep and not decision.rejection_reason:
@@ -1114,7 +1258,7 @@ OUTPUT REQUIREMENTS
                 )
 
     @staticmethod
-    def _support_level_from_alignment(
+    def _expected_support_level(
         decision: SemanticImpactDecision,
     ) -> str:
 
@@ -1123,9 +1267,14 @@ OUTPUT REQUIREMENTS
         change = decision.change_alignment
         evidence = decision.evidence_strength
 
-        # DIRECT:
-        # The complete requirement -> artifact -> change -> evidence
-        # chain is strongly supported.
+        # --------------------------------------------------------------
+        # DIRECT
+        # --------------------------------------------------------------
+        #
+        # Requirement clearly requires the change AND the engineering
+        # evidence directly supports the artifact/change assignment.
+        #
+
         if (
             requirement >= 0.90
             and artifact >= 0.90
@@ -1134,30 +1283,36 @@ OUTPUT REQUIREMENTS
         ):
             return "DIRECT"
 
-        # STRONGLY_IMPLIED:
-        # The requirement clearly establishes the semantic change and
-        # the artifact is a reasonable representation of the affected
-        # business concept.
+        # --------------------------------------------------------------
+        # STRONGLY IMPLIED
+        # --------------------------------------------------------------
         #
-        # Evidence does NOT need to be >= 0.75 because evidence strength
-        # represents implementation/ownership certainty, not semantic
-        # necessity.
+        # The business behavior is clearly required, but exact
+        # implementation ownership requires some inference.
+        #
+
         if (
-            requirement >= 0.75
-            and artifact >= 0.70
-            and change >= 0.75
+            requirement >= 0.85
+            and change >= 0.85
+            and artifact >= 0.50
         ):
             return "STRONGLY_IMPLIED"
 
-        # WEAKLY_SUPPORTED:
-        # There is meaningful relationship, but the semantic/artifact
-        # chain is not strong enough for the stronger classifications.
+        # --------------------------------------------------------------
+        # WEAKLY SUPPORTED
+        # --------------------------------------------------------------
+
         if (
             requirement >= 0.50
             and artifact >= 0.50
             and change >= 0.50
+            and evidence >= 0.50
         ):
             return "WEAKLY_SUPPORTED"
+
+        # --------------------------------------------------------------
+        # SPECULATIVE
+        # --------------------------------------------------------------
 
         return "SPECULATIVE"
 
