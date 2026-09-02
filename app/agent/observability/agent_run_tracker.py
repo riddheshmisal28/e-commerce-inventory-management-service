@@ -148,8 +148,6 @@ class AgentRunTracker:
             "steps": [
                 {
                     "step_name": step.step_name,
-                    "started_at": step.started_at.isoformat() if step.started_at else None,
-                    "ended_at": step.ended_at.isoformat() if step.ended_at else None,
                     "duration_ms": step.duration_ms,
                     "status": step.status,
                     "metrics": step.metadata,

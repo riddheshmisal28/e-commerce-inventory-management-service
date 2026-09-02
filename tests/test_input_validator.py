@@ -247,7 +247,7 @@ class TestSensitiveInformationDetection:
         """Test detection of API keys."""
         req = Requirement(
             title="Valid Title",
-            description="Valid description with api_key: sk_live_abcd1234efgh5678ijkl9012mnop3456",
+            description="Valid description with api_key: test_placeholder_key_1234567890",
             acceptance_criteria=["Valid criterion with proper content."]
         )
         is_valid, errors = validator.validate(req)
