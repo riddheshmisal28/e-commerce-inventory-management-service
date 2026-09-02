@@ -6,22 +6,67 @@ import ReportDashboard from './components/ReportDashboard';
 import LLMTraceModal from './components/LLMTraceModal';
 import { fetchHealth, fetchPresets, streamAgentAnalysis, runAgentAnalysis } from './services/api';
 
+const PRESET_REQUIREMENTS = [
+  {
+    id: 'low-stock-alert',
+    title: 'Low Stock Alert',
+    tag: 'Inventory & Notifications',
+    description:
+      'Notify inventory managers and warehouse supervisors when stock falls below a configurable threshold.',
+    acceptance_criteria: [
+      'Alert should trigger when quantity is below threshold.',
+      'Alert should not trigger for inactive products.',
+      'Threshold should be configurable per SKU.',
+      'Duplicate alerts should not be generated within 24 hours.',
+    ],
+  },
+  {
+    id: 'category-management',
+    title: 'Category Management',
+    tag: 'Catalog Management',
+    description: 'Create, list, update, and delete product categories with an optional description.',
+    acceptance_criteria: [
+      'Category names must contain between 2 and 255 characters.',
+      'A category can be retrieved by its identifier.',
+      'Deleting a category should return a successful no-content response.',
+    ],
+  },
+  {
+    id: 'product-catalog-search',
+    title: 'Product Catalog Search',
+    tag: 'Product Catalog',
+    description:
+      'Browse products with pagination and optional search and category filters, and search the catalog by query.',
+    acceptance_criteria: [
+      'Product listings must include total count, page, and page size.',
+      'A category filter should limit results to products in that category.',
+      'A search query must contain at least one character.',
+    ],
+  },
+  {
+    id: 'sku-inventory-management',
+    title: 'SKU Inventory Management',
+    tag: 'Inventory Operations',
+    description:
+      'Create and update SKUs for products while tracking SKU codes, prices, and available quantities.',
+    acceptance_criteria: [
+      'Every SKU must reference an existing product.',
+      'SKU price must be greater than zero and quantity cannot be negative.',
+      'SKUs can be listed for a specific product.',
+    ],
+  },
+];
+
 const DEFAULT_REQUIREMENT = {
-  id: 'low-stock-alert',
-  title: 'Low Stock Alert',
-  description:
-    'Notify inventory managers and warehouse supervisors when stock falls below a configurable threshold.',
-  acceptance_criteria: [
-    'Alert should trigger when quantity is below threshold.',
-    'Alert should not trigger for inactive products.',
-    'Threshold should be configurable per SKU.',
-    'Duplicate alerts should not be generated within 24 hours.',
-  ],
+  id: PRESET_REQUIREMENTS[0].id,
+  title: PRESET_REQUIREMENTS[0].title,
+  description: PRESET_REQUIREMENTS[0].description,
+  acceptance_criteria: [...PRESET_REQUIREMENTS[0].acceptance_criteria],
 };
 
 export default function App() {
   const [isOnline, setIsOnline] = useState(false);
-  const [presets, setPresets] = useState([]);
+  const [presets, setPresets] = useState(PRESET_REQUIREMENTS);
   const [requirement, setRequirement] = useState(DEFAULT_REQUIREMENT);
   const [isLoading, setIsLoading] = useState(false);
   const [activeStep, setActiveStep] = useState(null);

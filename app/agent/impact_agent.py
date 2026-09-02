@@ -38,6 +38,15 @@ from app.agent.steps.semantic_impact_refiner import (
 from app.agent.validators.grounding_validator import (
     GroundingValidator,
 )
+from app.agent.steps.code_facts_extractor import (
+    CodeFactsExtractor,
+)
+from app.agent.steps.dependency_graph_builder import (
+    DependencyGraphBuilderStep,
+)
+from app.agent.steps.evidence_collection import (
+    EvidenceCollectionStep,
+)
 
 class ImpactAgent:
 
@@ -47,6 +56,9 @@ class ImpactAgent:
         self.pipeline = [
             LLMRequirementPlanner(),
             ContextRetriever(),
+            CodeFactsExtractor(),
+            DependencyGraphBuilderStep(),     
+            EvidenceCollectionStep(),          
             ImpactReasoner(),
             ImpactValidator(),
             GroundingValidator(),
@@ -74,16 +86,19 @@ class ImpactAgent:
 if __name__ == "__main__":
 
     requirement = Requirement(
+        id="low-stock-alert",
         title="Low Stock Alert",
-        description="""
-        Notify inventory managers when stock
-        falls below a configurable threshold.
-        """,
+        tag="Inventory & Notifications",
+        description=(
+            "Notify inventory managers when a SKU's quantity falls below "
+            "its configured threshold. The system must evaluate the SKU "
+            "quantity against the configured threshold and send a notification "
+            "when the condition is met."
+        ),
         acceptance_criteria=[
-            "Alert should trigger when quantity is below threshold.",
-            "Alert should not trigger for inactive products.",
-            "Threshold should be configurable per SKU.",
-            "Duplicate alerts should not be generated within 24 hours.",
+            "Trigger an alert when a SKU's quantity is below its configured threshold.",
+            "Do not trigger an alert when the SKU's quantity is equal to or above its configured threshold.",
+            "The alert must notify the inventory manager.",
         ],
     )
 

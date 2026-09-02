@@ -171,10 +171,23 @@ class EngineeringContext(BaseModel):
     )
 
 class AnalysisContext(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     requirement: Requirement
     context_plan: ContextPlan | None = None
     engineering_context: EngineeringContext = Field(
         default_factory=EngineeringContext,
+    )
+    code_facts: dict[str, Any] = Field(
+        default_factory=dict,
+    )
+    dependency_graph: Any | None = None
+    graph_builder: Any | None = None
+    entity_evidence: dict[str, Any] = Field(
+        default_factory=dict,
+    )
+    field_evidence: dict[tuple[str, str], Any] = Field(
+        default_factory=dict,
     )
     entity_impacts: list[DataModelImpact] = Field(
         default_factory=list,

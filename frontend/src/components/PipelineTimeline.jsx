@@ -4,12 +4,15 @@ import { Workflow } from 'lucide-react';
 const PIPELINE_STEP_ORDER = [
   { key: 'LLM Requirement Planner', label: '1. Requirement Planner', desc: 'Context & Keyword Plan' },
   { key: 'Context Retriever', label: '2. Context Retriever', desc: 'Codebase Discovery' },
-  { key: 'Impact Reasoner', label: '3. Impact Reasoner', desc: 'Holistic LLM Reasoning' },
-  { key: 'Impact Validator', label: '4. Impact Validator', desc: 'Existence & Schema Check' },
-  { key: 'Grounding Validator', label: '5. Grounding Validator', desc: 'Artifact Grounding Check' },
-  { key: 'Semantic Impact Refiner', label: '6. Semantic Refiner', desc: 'Policy Gating & Refinement' },
-  { key: 'Blast Radius Analyzer', label: '7. Blast Radius', desc: 'Severity Aggregation' },
-  { key: 'Report Builder', label: '8. Report Builder', desc: 'Synthesis & Scenarios' },
+  { key: 'Code Facts Extractor', label: '3. Code Facts', desc: 'AST Source Analysis' },
+  { key: 'Dependency Graph Builder', label: '4. Dependency Graph', desc: 'Calls, Imports & Fields' },
+  { key: 'Evidence Collection', label: '5. Evidence Collection', desc: 'Requirement & Code Evidence' },
+  { key: 'Impact Reasoner', label: '6. Impact Reasoner', desc: 'Holistic LLM Reasoning' },
+  { key: 'Impact Validator', label: '7. Impact Validator', desc: 'Existence & Schema Check' },
+  { key: 'Grounding Validator', label: '8. Grounding Validator', desc: 'Artifact Grounding Check' },
+  { key: 'Semantic Impact Refiner', label: '9. Semantic Refiner', desc: 'Policy Gating & Refinement' },
+  { key: 'Blast Radius Analyzer', label: '10. Blast Radius', desc: 'Severity Aggregation' },
+  { key: 'Report Builder', label: '11. Report Builder', desc: 'Synthesis & Scenarios' },
 ];
 
 export default function PipelineTimeline({ agentRun, liveSteps, activeStep, isLoading }) {

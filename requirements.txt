@@ -12,3 +12,4 @@ python-json-logger
 httpx
 elasticsearch
 requests
+networkx>=3.0
