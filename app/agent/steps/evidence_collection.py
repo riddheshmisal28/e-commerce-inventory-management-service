@@ -27,7 +27,7 @@ class EvidenceCollectionStep(AgentStep):
 
     name = "Evidence Collection"
 
-    required_context = {"requirement", "entities"}
+    required_context = {"entities"}
 
     def execute(self, ctx: AnalysisContext) -> None:
         """

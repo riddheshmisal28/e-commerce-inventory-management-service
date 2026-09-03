@@ -42,6 +42,13 @@ class DependencyGraphBuilder:
             self.graph.add_edge(source, target, relation="imports")
             self.edges.append(edge)
 
+    def add_field_reference(self, source: str, target: str):
+        """Add a dependency from a class to a type used by one of its fields."""
+        edge = (source, target)
+        if edge not in self.edges:
+            self.graph.add_edge(source, target, relation="field_reference")
+            self.edges.append(edge)
+
     def get_blast_radius(self, node: str, depth: int = 3) -> Set[str]:
         """
         Get all nodes affected by changes to 'node'.
