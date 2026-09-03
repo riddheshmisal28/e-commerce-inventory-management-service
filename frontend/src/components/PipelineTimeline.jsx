@@ -13,6 +13,7 @@ const PIPELINE_STEP_ORDER = [
   { key: 'Semantic Impact Refiner', label: '9. Semantic Refiner', desc: 'Policy Gating & Refinement' },
   { key: 'Blast Radius Analyzer', label: '10. Blast Radius', desc: 'Severity Aggregation' },
   { key: 'Report Builder', label: '11. Report Builder', desc: 'Synthesis & Scenarios' },
+  { key: 'Output Validator', label: '12. Output Validator', desc: 'Final Guardrails' },
 ];
 
 export default function PipelineTimeline({ agentRun, liveSteps, activeStep, isLoading }) {

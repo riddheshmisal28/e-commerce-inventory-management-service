@@ -3,11 +3,10 @@ Integration tests for Phase 1 & 2: AST Facts Extraction + Evidence Collection
 """
 
 import pytest
-from pathlib import Path
+import networkx as nx
 from app.agent.code_analysis.ast_parser import (
     ASTFactsExtractor,
-    FieldType,
-    ModuleFacts,
+    FieldType
 )
 from app.agent.code_analysis.dependency_graph import DependencyGraphBuilder
 from app.agent.evidence.models import Evidence, EvidenceType, ImpactEvidence
@@ -115,72 +114,405 @@ class SKURepository:
 
 
 class TestDependencyGraphBuilder:
-    """Test Phase 1: Dependency Graph Building"""
 
     def test_add_entities_and_edges(self):
-        """Test adding entities and call edges"""
+        """Test adding entities and dependency edges."""
         builder = DependencyGraphBuilder()
 
-        builder.add_entity("SKU", "entity", "app/sku/model.py")
-        builder.add_entity("Product", "entity", "app/product/model.py")
-        builder.add_entity("create_sku", "function", "app/sku/service.py")
+        sku = builder.add_entity(
+            "SKU",
+            "entity",
+            "app/sku/model.py",
+        )
+        product = builder.add_entity(
+            "Product",
+            "entity",
+            "app/product/model.py",
+        )
+        create_sku = builder.add_entity(
+            "create_sku",
+            "function",
+            "app/sku/service.py",
+        )
 
-        builder.add_call_edge("create_sku", "SKU", line_number=42)
-        builder.add_import_edge("create_sku", "sqlalchemy")
+        # Verify stable node IDs
+        assert sku == "entity:SKU"
+        assert product == "entity:Product"
+        assert create_sku == "function:create_sku"
+
+        builder.add_call_edge(
+            create_sku,
+            sku,
+            line_number=42,
+        )
+
+        # External modules are not necessarily graph nodes.
+        # Add the module first if we want to represent it.
+        sqlalchemy = builder.add_entity(
+            "sqlalchemy",
+            "module",
+        )
+
+        builder.add_import_edge(
+            create_sku,
+            sqlalchemy,
+        )
 
         graph_facts = builder.build()
 
-        # Check nodes
-        assert len(graph_facts.nodes) == 3
-        assert "entity:SKU" in graph_facts.nodes
+        # ---------------------------------------------------------
+        # Nodes
+        # ---------------------------------------------------------
 
-        # Check edges
+        assert len(graph_facts.nodes) == 4
+
+        assert "entity:SKU" in graph_facts.nodes
+        assert "entity:Product" in graph_facts.nodes
+        assert "function:create_sku" in graph_facts.nodes
+        assert "module:sqlalchemy" in graph_facts.nodes
+
+        # ---------------------------------------------------------
+        # Edges
+        # ---------------------------------------------------------
+
         assert len(graph_facts.edges) == 2
 
-    def test_blast_radius_calculation(self):
-        """Test blast radius calculation"""
+        assert (
+            "function:create_sku",
+            "entity:SKU",
+        ) in graph_facts.edges
+
+        assert (
+            "function:create_sku",
+            "module:sqlalchemy",
+        ) in graph_facts.edges
+
+    def test_node_metadata(self):
+        """Test that node metadata is preserved."""
         builder = DependencyGraphBuilder()
 
-        # Create a dependency chain: A → B → C
-        builder.add_entity("A", "function")
-        builder.add_entity("B", "function")
-        builder.add_entity("C", "function")
-        builder.add_entity("D", "function")
+        node_id = builder.add_entity(
+            "SKU",
+            "entity",
+            "app/sku/model.py",
+        )
 
-        builder.add_call_edge("A", "B")
-        builder.add_call_edge("B", "C")
-        builder.add_call_edge("D", "B")
+        graph_facts = builder.build()
 
-        # If A changes, it affects B and C (forward)
-        affected_by_a = builder.get_blast_radius("A")
-        assert "A" in affected_by_a
-        assert "B" in affected_by_a
-        assert "C" in affected_by_a
+        assert node_id == "entity:SKU"
 
-        # If B changes, it affects A, C, and D (forward + backward)
-        affected_by_b = builder.get_blast_radius("B")
-        assert "B" in affected_by_b
-        assert "C" in affected_by_b
-        assert "D" in affected_by_b
-        assert "A" in affected_by_b
+        metadata = graph_facts.nodes[node_id]
+
+        assert metadata["name"] == "SKU"
+        assert metadata["type"] == "entity"
+        assert metadata["file"] == "app/sku/model.py"
+
+    def test_call_edge_metadata(self):
+        """Test call relationship metadata."""
+        builder = DependencyGraphBuilder()
+
+        caller = builder.add_entity(
+            "create_sku",
+            "function",
+        )
+
+        callee = builder.add_entity(
+            "SKU",
+            "entity",
+        )
+
+        builder.add_call_edge(
+            caller,
+            callee,
+            line_number=42,
+        )
+
+        graph_facts = builder.build()
+
+        edge_data = graph_facts.graph.get_edge_data(
+            caller,
+            callee,
+        )
+
+        assert edge_data is not None
+        assert edge_data["relation"] == "calls"
+        assert edge_data["line"] == 42
+
+    def test_import_edge(self):
+        """Test import dependency."""
+        builder = DependencyGraphBuilder()
+
+        source = builder.add_entity(
+            "SkuService",
+            "class",
+        )
+
+        target = builder.add_entity(
+            "Database",
+            "module",
+        )
+
+        builder.add_import_edge(
+            source,
+            target,
+        )
+
+        graph_facts = builder.build()
+
+        assert graph_facts.graph.has_edge(
+            source,
+            target,
+        )
+
+        edge_data = graph_facts.graph.get_edge_data(
+            source,
+            target,
+        )
+
+        assert edge_data["relation"] == "imports"
+
+    def test_field_reference_edge(self):
+        """Test class field type dependency."""
+        builder = DependencyGraphBuilder()
+
+        order = builder.add_entity(
+            "Order",
+            "class",
+        )
+
+        sku = builder.add_entity(
+            "SKU",
+            "class",
+        )
+
+        builder.add_field_reference(
+            order,
+            sku,
+        )
+
+        graph_facts = builder.build()
+
+        assert graph_facts.graph.has_edge(
+            order,
+            sku,
+        )
+
+        edge_data = graph_facts.graph.get_edge_data(
+            order,
+            sku,
+        )
+
+        assert edge_data["relation"] == "field_reference"
+
+    def test_blast_radius_calculation(self):
+        """
+        Test blast radius calculation.
+
+        Graph:
+
+            A → B → C
+                ↑
+                |
+                D
+
+        Changing A affects:
+            A, B, C
+
+        Changing B affects:
+            A, B, C, D
+        """
+
+        builder = DependencyGraphBuilder()
+
+        a = builder.add_entity("A", "function")
+        b = builder.add_entity("B", "function")
+        c = builder.add_entity("C", "function")
+        d = builder.add_entity("D", "function")
+
+        builder.add_call_edge(a, b)
+        builder.add_call_edge(b, c)
+        builder.add_call_edge(d, b)
+
+        # ---------------------------------------------------------
+        # A
+        # ---------------------------------------------------------
+
+        affected_by_a = builder.get_blast_radius(a)
+
+        assert a in affected_by_a
+        assert b in affected_by_a
+        assert c in affected_by_a
+
+        # D does not depend on A.
+        assert d not in affected_by_a
+
+        # ---------------------------------------------------------
+        # B
+        # ---------------------------------------------------------
+
+        affected_by_b = builder.get_blast_radius(b)
+
+        assert b in affected_by_b
+        assert a in affected_by_b
+        assert c in affected_by_b
+        assert d in affected_by_b
+
+    def test_blast_radius_respects_depth(self):
+        """Test bounded blast-radius traversal."""
+
+        builder = DependencyGraphBuilder()
+
+        a = builder.add_entity("A", "function")
+        b = builder.add_entity("B", "function")
+        c = builder.add_entity("C", "function")
+        d = builder.add_entity("D", "function")
+
+        builder.add_call_edge(a, b)
+        builder.add_call_edge(b, c)
+        builder.add_call_edge(c, d)
+
+        affected = builder.get_blast_radius(
+            a,
+            depth=2,
+        )
+
+        assert a in affected
+        assert b in affected
+        assert c in affected
+
+        # D is three hops away.
+        assert d not in affected
 
     def test_find_path(self):
-        """Test finding path between nodes"""
+        """Test finding directed dependency path."""
+
         builder = DependencyGraphBuilder()
 
-        builder.add_entity("A", "function")
-        builder.add_entity("B", "function")
-        builder.add_entity("C", "function")
+        a = builder.add_entity("A", "function")
+        b = builder.add_entity("B", "function")
+        c = builder.add_entity("C", "function")
 
-        builder.add_call_edge("A", "B")
-        builder.add_call_edge("B", "C")
+        builder.add_call_edge(a, b)
+        builder.add_call_edge(b, c)
 
-        path = builder.find_path("A", "C")
-        assert path == ["A", "B", "C"]
+        path = builder.find_path(a, c)
 
+        assert path == [
+            "function:A",
+            "function:B",
+            "function:C",
+        ]
+
+    def test_find_path_when_no_path_exists(self):
+        """Test empty path when nodes are disconnected."""
+
+        builder = DependencyGraphBuilder()
+
+        a = builder.add_entity("A", "function")
+        b = builder.add_entity("B", "function")
+
+        path = builder.find_path(a, b)
+
+        assert path == []
+
+    def test_blast_radius_unknown_node(self):
+        """Unknown nodes should return an empty/safe result."""
+
+        builder = DependencyGraphBuilder()
+
+        builder.add_entity(
+            "A",
+            "function",
+        )
+
+        affected = builder.get_blast_radius(
+            "function:Unknown",
+        )
+
+        assert affected == set()
+
+    def test_duplicate_edges_are_not_created(self):
+        """Adding the same relationship twice should not duplicate it."""
+
+        builder = DependencyGraphBuilder()
+
+        a = builder.add_entity("A", "function")
+        b = builder.add_entity("B", "function")
+
+        builder.add_call_edge(a, b)
+        builder.add_call_edge(a, b)
+
+        graph_facts = builder.build()
+
+        assert len(graph_facts.edges) == 1
+        assert graph_facts.graph.number_of_edges() == 1
+
+    def test_multiple_relationship_types(self):
+        """
+        Test that different relationship types between nodes
+        can be represented.
+        """
+
+        builder = DependencyGraphBuilder()
+
+        service = builder.add_entity(
+            "SkuService",
+            "class",
+        )
+
+        sku = builder.add_entity(
+            "SKU",
+            "class",
+        )
+
+        builder.add_call_edge(
+            service,
+            sku,
+        )
+
+        builder.add_field_reference(
+            service,
+            sku,
+        )
+
+        graph_facts = builder.build()
+
+        # Important:
+        # NetworkX DiGraph supports only one edge between two nodes.
+        # Therefore the later relationship may overwrite the previous
+        # edge metadata depending on implementation.
+        assert graph_facts.graph.has_edge(
+            service,
+            sku,
+        )
+
+    def test_graph_is_directed(self):
+        """Dependency graph should be a directed graph."""
+
+        builder = DependencyGraphBuilder()
+
+        assert isinstance(
+            builder.graph,
+            nx.DiGraph,
+        )
+
+    def test_build_returns_graph_facts(self):
+        """Test build() returns the expected graph facts."""
+
+        builder = DependencyGraphBuilder()
+
+        builder.add_entity(
+            "SKU",
+            "entity",
+        )
+
+        facts = builder.build()
+
+        assert facts.graph is builder.graph
+        assert facts.nodes is builder.nodes
+        assert facts.edges is builder.edges
 
 class TestEvidenceCollection:
-    """Test Phase 2: Evidence Collection"""
 
     def test_evidence_types(self):
         """Test that all evidence types are defined"""

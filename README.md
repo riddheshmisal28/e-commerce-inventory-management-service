@@ -12,7 +12,7 @@ A FastAPI-based inventory management service with PostgreSQL persistence, Elasti
 - **Correlation ID Middleware**: Structured logging and tracing across services.
 - **Model Context Protocol (MCP)**: Dynamic exposure of application tools and schemas to LLMs.
 - **Engineering Context API**: Special metadata endpoints to inspect database tables, models, and routes.
-- **Agentic Impact Analysis**: An 11-step pipeline engine with code-fact extraction, dependency graph analysis, evidence collection, LLM-powered reasoning, multi-layer grounding validation, semantic impact refinement, deterministic execution gating, and observability tracing that processes requirement documents and produces comprehensive impact reports (blast radius, contract mutations, data schemas, BDD test scenarios).
+- **Agentic Impact Analysis**: A 12-step pipeline engine with code-fact extraction, dependency graph analysis, evidence collection, LLM-powered reasoning, multi-layer grounding validation, semantic impact refinement, deterministic execution gating, final output validation, and observability tracing that processes requirement documents and produces comprehensive impact reports (blast radius, contract mutations, data schemas, BDD test scenarios).
 - **Input Validation & Guardrails**: Multi-layer input protection against prompt injection, sensitive data leakage, vague requirements, and domain-irrelevant content with comprehensive error categorization and reporting.
 
 ## Tech Stack
@@ -170,9 +170,11 @@ Requirement
   10. Blast Radius Analyzer   (Aggregation, deduplication & severity)
     ↓
   11. Report Builder          (Report assembly + scenarios + BDD)
+    ↓
+  12. Output Validator        (Final deterministic guardrails)
 ```
 
-The `ImpactAgent` orchestrates an **11-step pipeline** via `PipelineExecutor`. Each step implements the `AgentStep` interface, receives a shared `AnalysisContext`, and updates it in place:
+The `ImpactAgent` orchestrates a **12-step pipeline** via `PipelineExecutor`. Each step implements the `AgentStep` interface, receives a shared `AnalysisContext`, and updates it in place:
 
 | #   | Step                         | Module                                     | Responsibility                                                                                                                                                                                                                                                                                          |
 | --- | ---------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -187,6 +189,7 @@ The `ImpactAgent` orchestrates an **11-step pipeline** via `PipelineExecutor`. E
 | 9   | **Semantic Impact Refiner**  | `steps/semantic_impact_refiner.py`         | Evaluates candidate necessity using a 4-dimensional validation chain (`requirement_alignment`, `artifact_alignment`, `change_alignment`, `evidence_strength`), assigns `support_level`, requires rejection reasons, and calculates quality summary metrics. Gated by `DecisionGate`.                    |
 | 10  | **Blast Radius Analyzer**    | `analyzers/blast_radius.py`                | Aggregates all validated and refined impacts into a unified, deduplicated blast radius with severity levels (Low / Medium / High).                                                                                                                                                                      |
 | 11  | **Report Builder**           | `builders/report_builder.py`               | Assembles all findings into an `ImpactAnalysisReport`, including LLM-generated clarifications and combined test/BDD scenario packs.                                                                                                                                                                     |
+| 12  | **Output Validator**         | `validators/output_validator.py`           | Applies deterministic final guardrails to the assembled report, records validation metrics, and fails the run when blocking output issues are found.                                                                                                                                                    |
 
 #### Impact Reasoner
 
@@ -550,7 +553,7 @@ inventory-management-service/
 ├── app/
 │   ├── main.py                         # FastAPI application entry point
 │   ├── agent/                          # Impact Analysis Agent
-│   │   ├── impact_agent.py             # ImpactAgent orchestrator (11-step pipeline)
+│   │   ├── impact_agent.py             # ImpactAgent orchestrator (12-step pipeline)
 │   │   ├── models.py                   # Pydantic domain models (Requirement, AnalysisContext, Reports, etc.)
 │   │   ├── context_client.py           # HTTP client for Engineering Context APIs
 │   │   ├── core/

@@ -38,6 +38,9 @@ from app.agent.steps.semantic_impact_refiner import (
 from app.agent.validators.grounding_validator import (
     GroundingValidator,
 )
+from app.agent.validators.output_validator import (
+    OutputValidator,
+)
 from app.agent.steps.code_facts_extractor import (
     CodeFactsExtractor,
 )
@@ -65,6 +68,7 @@ class ImpactAgent:
             SemanticImpactRefiner(),
             BlastRadiusAnalyzer(),
             ReportBuilder(),
+            OutputValidator(),
         ]
 
     def run(
