@@ -110,6 +110,11 @@ class SourceScanner:
             "venv",
             "__pycache__",
             ".git",
+            "tests",
+            "agent",
+            "engineering",
+            "core",
+            "middleware",
         }
 
         for path in self.root_dir.rglob("*.py"):
