@@ -13,7 +13,7 @@ class CategoryService:
         self.repo = CategoryRepository()
 
     def create_category(self, db: Session, data: CategoryCreate) -> Category:
-        logger.info("Attempting to create category", extra={"name": data.name})
+        logger.info("Attempting to create category", extra={"category_name": data.name})
         existing = self.repo.get_by_name(db, data.name)
         if existing:
             logger.error("Category creation failed: Name already exists", extra={"name": data.name})

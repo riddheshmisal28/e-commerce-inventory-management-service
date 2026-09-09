@@ -1,0 +1,5 @@
+# planner_model = "qwen3:14b"
+# reasoner_model = "qwen3-coder:30b"
+planner_model = "qwen3:8b"
+reasoner_model = "qwen3:8b"
+llm_provider = "ollama"

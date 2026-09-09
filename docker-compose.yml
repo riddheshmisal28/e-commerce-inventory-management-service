@@ -30,6 +30,7 @@ services:
       - .env
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     depends_on:
       db:
         condition: service_healthy
